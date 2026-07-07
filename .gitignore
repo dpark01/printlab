@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# uv / venv
+.venv/
+
+# Claude Code local settings (machine-specific, not shared)
+.claude/settings.local.json
+
+# PrintLab pipeline output (generated artifacts, not source)
+output/
+
+# OS cruft
+.DS_Store
+
+# Slicer scratch/cache files
+*.gcode.tmp
+*.3mf.tmp
+# Bambu Studio writes this to the cwd on some invocations, even outside output/
+/result.json

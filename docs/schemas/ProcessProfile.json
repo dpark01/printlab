@@ -1,0 +1,60 @@
+{
+  "additionalProperties": false,
+  "description": "(c) The small allowlist of overridable process knobs.",
+  "properties": {
+    "brim": {
+      "title": "Brim",
+      "type": "boolean"
+    },
+    "infill_percent": {
+      "title": "Infill Percent",
+      "type": "number"
+    },
+    "layer_height_mm": {
+      "title": "Layer Height Mm",
+      "type": "number"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "native_bundle": {
+      "additionalProperties": {
+        "format": "path",
+        "type": "string"
+      },
+      "title": "Native Bundle",
+      "type": "object"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "supports": {
+      "title": "Supports",
+      "type": "boolean"
+    },
+    "wall_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Wall Count"
+    }
+  },
+  "required": [
+    "name",
+    "layer_height_mm",
+    "infill_percent",
+    "supports",
+    "brim"
+  ],
+  "title": "ProcessProfile",
+  "type": "object"
+}

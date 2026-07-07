@@ -1,0 +1,49 @@
+[project]
+name = "printlab"
+version = "0.1.0"
+description = "A deterministic engineering environment for 3D-printable mechanical design."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "dpark01" }]
+
+dependencies = [
+    "cadquery>=2.8.0,<3",
+    "trimesh>=4.4,<5",
+    "typer>=0.15,<1",
+    "pydantic>=2.9,<3",
+    "pyyaml>=6.0,<7",
+    "numpy>=1.26,<3",
+]
+
+[project.scripts]
+printlab = "printlab.cli.main:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9",
+    "ruff>=0.8,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["printlab"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: requires an external slicer/CAD binary to be installed",
+]
+
+[tool.uv]
+package = true

@@ -1,0 +1,15 @@
+# Engineering constraints for the Bambu Lab A1 (0.4mm nozzle).
+# native_bundle paths point to committed, backend-native config files -- see
+# profiles/native/ -- rather than re-modeling every slicer setting here.
+schema_version: "0.1.0"
+name: "Bambu Lab A1"
+manufacturer: "Bambu Lab"
+build_volume_mm: [256.0, 256.0, 256.0]
+nozzle_diameter_mm: 0.4
+allowed_layer_heights_mm: [0.08, 0.12, 0.16, 0.20, 0.24, 0.28]
+min_feature_size_mm: 0.4
+max_bed_temp_c: 100.0
+max_nozzle_temp_c: 300.0
+native_bundle:
+  bambu: profiles/native/bambu/machine_bambu_a1_0.4_nozzle.json
+  prusaslicer: profiles/native/prusaslicer/printer_generic_0.4.ini

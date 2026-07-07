@@ -1,0 +1,163 @@
+{
+  "$defs": {
+    "ArtifactError": {
+      "additionalProperties": false,
+      "description": "A single structured failure, so an agent can branch without parsing prose.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "context": {
+          "additionalProperties": true,
+          "title": "Context",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "stage"
+      ],
+      "title": "ArtifactError",
+      "type": "object"
+    },
+    "BBox": {
+      "additionalProperties": false,
+      "description": "Axis-aligned bounding box, in millimeters.",
+      "properties": {
+        "max": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Max",
+          "type": "array"
+        },
+        "min": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Min",
+          "type": "array"
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "title": "BBox",
+      "type": "object"
+    },
+    "Status": {
+      "description": "Outcome of a stage, or of a single evaluation check.",
+      "enum": [
+        "ok",
+        "warning",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "bbox": {
+      "$ref": "#/$defs/BBox"
+    },
+    "errors": {
+      "items": {
+        "$ref": "#/$defs/ArtifactError"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "input_path": {
+      "format": "path",
+      "title": "Input Path",
+      "type": "string"
+    },
+    "input_sha256": {
+      "title": "Input Sha256",
+      "type": "string"
+    },
+    "manifold": {
+      "title": "Manifold",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "self_intersecting": {
+      "title": "Self Intersecting",
+      "type": "boolean"
+    },
+    "self_intersection_count": {
+      "title": "Self Intersection Count",
+      "type": "integer"
+    },
+    "shell_count": {
+      "title": "Shell Count",
+      "type": "integer"
+    },
+    "status": {
+      "$ref": "#/$defs/Status",
+      "default": "ok"
+    },
+    "surface_area_mm2": {
+      "title": "Surface Area Mm2",
+      "type": "number"
+    },
+    "volume_mm3": {
+      "title": "Volume Mm3",
+      "type": "number"
+    },
+    "watertight": {
+      "title": "Watertight",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "input_path",
+    "input_sha256",
+    "manifold",
+    "watertight",
+    "self_intersecting",
+    "self_intersection_count",
+    "shell_count",
+    "bbox",
+    "surface_area_mm2",
+    "volume_mm3"
+  ],
+  "title": "MeshReport",
+  "type": "object"
+}

@@ -1,0 +1,18 @@
+# Pinned native tool versions -- layer 2 of PrintLab's three-layer
+# reproducibility model (see docs/environment.md). Python dependencies are
+# pinned separately via uv.lock/requirements.txt (layer 1).
+#
+# `printlab doctor` compares installed versions against these pins. Every
+# pipeline run also records the *actual* resolved version in
+# run_manifest.json -- Tier-1 reproducibility requires those recorded
+# versions to match across runs, not merely that `printlab doctor` is clean.
+
+[tools.prusaslicer]
+version = "2.9.6"
+homepage = "https://github.com/prusa3d/PrusaSlicer"
+role = "Reference backend for CI and determinism."
+
+[tools.bambustudio]
+version = "02.07.01.62"
+homepage = "https://github.com/bambulab/BambuStudio"
+role = "Primary backend for Bambu Lab printers."

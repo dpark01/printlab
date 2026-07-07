@@ -1,0 +1,111 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "brim": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Brim"
+    },
+    "infill_percent": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Infill Percent"
+    },
+    "input_model": {
+      "format": "path",
+      "title": "Input Model",
+      "type": "string"
+    },
+    "layer_height_mm": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Layer Height Mm"
+    },
+    "material_profile": {
+      "format": "path",
+      "title": "Material Profile",
+      "type": "string"
+    },
+    "output_dir": {
+      "format": "path",
+      "title": "Output Dir",
+      "type": "string"
+    },
+    "printer_profile": {
+      "format": "path",
+      "title": "Printer Profile",
+      "type": "string"
+    },
+    "process_profile": {
+      "anyOf": [
+        {
+          "format": "path",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Process Profile"
+    },
+    "quality_preset": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quality Preset"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "supports": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Supports"
+    }
+  },
+  "required": [
+    "input_model",
+    "output_dir",
+    "printer_profile",
+    "material_profile"
+  ],
+  "title": "SliceRequest",
+  "type": "object"
+}

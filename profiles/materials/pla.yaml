@@ -1,0 +1,11 @@
+# Material physics for generic PLA. density_g_cm3 is what lets PrintLab
+# compute filament mass itself instead of trusting a slicer's own report.
+schema_version: "0.1.0"
+name: "Generic PLA"
+material: "PLA"
+density_g_cm3: 1.24
+nozzle_temp_c: [190.0, 220.0]
+bed_temp_c: [45.0, 60.0]
+native_bundle:
+  bambu: profiles/native/bambu/filament_generic_pla.json
+  prusaslicer: profiles/native/prusaslicer/filament_generic_pla.ini

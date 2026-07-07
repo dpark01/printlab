@@ -1,0 +1,68 @@
+{
+  "additionalProperties": false,
+  "description": "(a) Material physics needed to compute mass/temperature checks ourselves.",
+  "properties": {
+    "bed_temp_c": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Bed Temp C",
+      "type": "array"
+    },
+    "density_g_cm3": {
+      "title": "Density G Cm3",
+      "type": "number"
+    },
+    "material": {
+      "title": "Material",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "native_bundle": {
+      "additionalProperties": {
+        "format": "path",
+        "type": "string"
+      },
+      "title": "Native Bundle",
+      "type": "object"
+    },
+    "nozzle_temp_c": {
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Nozzle Temp C",
+      "type": "array"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "material",
+    "density_g_cm3",
+    "nozzle_temp_c",
+    "bed_temp_c"
+  ],
+  "title": "MaterialProfile",
+  "type": "object"
+}

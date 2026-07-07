@@ -1,0 +1,16 @@
+# The small allowlist of overridable process knobs (part (c) of the 3-part
+# profile split). Values here are also baked into the committed native
+# bundles below so a run using neither SliceRequest overrides nor drift
+# between the two layers; each backend re-applies these explicitly to keep
+# the resolution precedence (native bundle -> process profile -> CLI
+# override) real rather than accidental.
+schema_version: "0.1.0"
+name: "draft"
+layer_height_mm: 0.2
+infill_percent: 15.0
+supports: false
+brim: false
+wall_count: 2
+native_bundle:
+  bambu: profiles/native/bambu/process_draft_0.2.json
+  prusaslicer: profiles/native/prusaslicer/process_draft_0.2.ini
