@@ -1,0 +1,12 @@
+# Same knobs as draft.yaml, with supports enabled -- for parts (like
+# examples/benchy) whose overhangs/bridges are the point of the example.
+schema_version: "0.1.0"
+name: "supports"
+layer_height_mm: 0.2
+infill_percent: 15.0
+supports: true
+brim: false
+wall_count: 2
+native_bundle:
+  bambu: profiles/native/bambu/process_draft_0.2.json
+  prusaslicer: profiles/native/prusaslicer/process_draft_0.2.ini

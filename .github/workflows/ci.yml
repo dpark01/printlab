@@ -37,6 +37,8 @@ jobs:
       - run: uv run pytest tests/ -v
       - name: Smoke-test the real CAD build (exercises CadQuery/OCP, not just fixtures)
         run: uv run printlab build examples/bracket --backend prusaslicer
+      - name: Smoke-test the Benchy CAD import (exercises vendored STEP -> CadQuery)
+        run: uv run printlab build examples/benchy --backend prusaslicer
 
   requirements-in-sync:
     name: requirements.txt matches uv.lock
