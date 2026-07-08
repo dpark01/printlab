@@ -28,6 +28,14 @@ This builds the example L-bracket, slices it, and writes every artifact to
 Bambu Studio or OrcaSlicer instead — the same CAD source, profiles, and
 evaluation logic apply to all three.
 
+No slicer installed? `uv run printlab check examples/hook` runs build ->
+mesh -> evaluate -> report with slicing skipped entirely — the mesh-derived
+printability checks (manifold, build-volume fit, wall thickness) still
+produce a real pass/warn/fail verdict; slicer-derived metrics (filament
+mass, print time) come back null. `uv run printlab orient examples/hook`
+tries the 6 axis-aligned rotations of a built part and recommends one by an
+explicit tie-break chain over the overhang/wall-thickness/bridge metrics.
+
 See [`docs/environment.md`](docs/environment.md) for full environment setup
 (macOS/Linux setup scripts, the three-layer reproducibility model).
 
@@ -54,6 +62,7 @@ provenance record that makes two runs comparable and an agent loop auditable.
 | `part.step` / `part.stl`     | `printlab.cad`          | Pinned tessellation deflection                  |
 | `mesh_report.json`           | `printlab.mesh`         | Geometry only: manifold, bbox, volume, area     |
 | `mesh_repair_report.json`    | `printlab.mesh`         | Explicit-only (`printlab repair`), not in `all` |
+| `orientation_search_report.json` | `printlab.mesh`     | Explicit-only (`printlab orient`), not in `all` |
 | `slice_result.json`          | `printlab.slicing`      | Backend-specific; `resolved_settings` is hashed |
 | `gcode_report.json`          | `printlab.gcode`        | Authoritative — see caveat below                |
 | `printability_report.json`   | `printlab.evaluation`   | Raw metrics + pass/warn/fail checks, no score   |
@@ -92,8 +101,42 @@ then: a second example (`examples/hook`, with a real cantilevered
 overhang), `quality`/`strength` process profiles alongside `draft`, the
 HTML report, basic mesh repair (`printlab repair`), and a third backend
 (OrcaSlicer, added after an evidence-based spike — see
-`printlab/slicing/orcaslicer.py`). Unit tests need neither a CAD kernel nor
-a slicer; integration
-tests are capability-gated. Deferred to later phases: orientation search,
-mesh repair, manufacturing-tractability metrics (min wall thickness,
-overhangs, bridges), and a calibrated composite score.
+`printlab/slicing/orcaslicer.py`).
+
+Manufacturing-tractability metrics (minimum wall thickness, an overhang
+histogram, unsupported-span/"bridge" detection) are done and always present
+in `mesh_report.json`. Orientation search (`printlab orient`) is also done:
+it tries the 6 axis-aligned rotations of a built part and recommends one by
+an explicit tie-break chain (minimize overhang, then maximize wall
+thickness, then minimize unsupported span — see
+`printlab/mesh/orientation.py`), not a weighted score. Concretely, it cuts
+`examples/hook`'s ~32mm default-orientation cantilever to 20mm. `printlab
+check` runs build -> mesh -> evaluate -> report with slicing skipped
+entirely, so the mesh-derived printability checks are reachable with no
+slicer installed (`printlab.pipeline.run_check`). Two further example parts
+(`examples/thinwall`, `examples/bridge`) exist purely as future calibration
+data — see below. `scripts/optimize_loop.py` implements the agent
+optimization loop this project originally specified (`repeat: edit CAD ->
+build -> evaluate -> compare -> until the metric stops improving`) as a
+standalone script outside the engineering pipeline, with a pluggable
+`propose_edit` callback (PrintLab itself never calls an LLM) and a
+deterministic demo proposer so the loop runs and tests with zero LLM.
+
+Unit tests need neither a CAD kernel nor a slicer; integration tests are
+capability-gated — most need a real slicer binary and self-skip without one,
+but the `check`/`orient`/optimize-loop tests need only a real CadQuery build
+and always run in the heavy lane, since they exercise no slicer at all.
+
+Deferred: a calibrated composite printability score — an uncalibrated
+hand-weighted scalar would be noise an agent learns to game rather than a
+real signal (see `printlab/schemas/evaluation.py`); it needs calibration
+data (more example parts spanning known failure modes, ideally real print
+outcomes) before picking weights, which is what `examples/thinwall` and
+`examples/bridge` are for. Also deferred: full containerization. The
+deterministic core (CadQuery/trimesh/PrintLab) is already multi-arch —
+`cadquery-ocp` and `vtk` both publish `linux/aarch64` wheels, so `uv sync`
+alone reproduces the environment on Apple Silicon or amd64 alike — but two
+of the three slicers ship x86_64-only Linux binaries, so a slicer-bearing
+image can't currently be multi-arch too. See
+[`docs/environment.md`](docs/environment.md) for the full reasoning and the
+path being considered (a headless CuraEngine spike) if that's revisited.

@@ -70,8 +70,49 @@ CAD backend (OpenSCAD, FreeCAD) would join layer 2 instead.
 ## What's deliberately out of scope for v0.1
 
 Full turnkey containerization (a `Dockerfile`/devcontainer wrapping all three
-layers) is a natural next step for portability, but is deferred: slicers pull
-in GUI/GL dependencies that are awkward to containerize cleanly, and the
+layers) is a natural next step for portability, but is deferred, and the
+reasoning has sharpened since this was first written: it isn't that
+containerizing the whole stack is hard in general -- layer 1 turns out to
+already be multi-arch (see below) -- it's specifically that layer 2's
+slicers aren't, and the checks that most matter (manifold, build-volume fit,
+minimum wall thickness -- everything mesh-derived) don't need a slicer at
+all (see `printlab check` / `printlab.pipeline.run_check`). The
 setup-scripts-plus-`doctor` approach above already gets a new machine to a
-known, checkable state. Revisit this once the vertical slice has grown enough
-to justify the extra packaging work.
+known, checkable state in the meantime.
+
+**Layer 1 is already multi-arch, concretely verified:** `cadquery-ocp`
+(`manylinux_2_31_aarch64`) and `vtk` (`manylinux_2_28_aarch64`) both publish
+`linux/aarch64` wheels for the pinned Python version, alongside the existing
+`linux/x86_64` wheels -- so `uv sync` alone reproduces the full Python
+environment on Apple Silicon or amd64 Linux identically, no conda and no
+per-arch special-casing needed. A container for this layer would only add
+one real thing: pinning the OS/GL-shared-library layer that OCP/vtk link
+against at import time (undocumented today; CI's `ubuntu-latest` happens to
+have enough of it installed already).
+
+**Layer 2's slicers are the actual constraint, not layer 1:** Bambu Studio
+and OrcaSlicer publish only `ubuntu24.04` **x86_64** AppImages at the pinned
+versions in `tools.toml` -- no `linux/aarch64` build exists at all.
+PrusaSlicer has no Linux binary whatsoever on its GitHub releases (Flatpak
+is its only supported Linux channel, which is itself awkward inside Docker).
+So a container that bundles any of today's three slicers is realistically
+amd64-only; "multi-arch and contains a slicer" isn't simultaneously
+achievable with this slicer set.
+
+**If this is revisited:** the natural split is a multi-arch `printlab-core`
+image (layer 1 only, no slicer -- covers CAD build, mesh analysis,
+orientation search, evaluation, reporting on any arch) plus a separate
+amd64-only `printlab-full` image that adds PrusaSlicer (the reference/CI
+backend already used for golden reproducibility tests) -- bundling it would
+let CI finally *run* those tests instead of skipping them for lack of an
+installed slicer. Slic3r was evaluated and rejected as an alternative: it is
+PrusaSlicer's unmaintained ancestor (last release 1.3.0, May 2018),
+strictly worse and no more portable. A more promising path to a multi-arch
+*full* image is a time-boxed spike on **CuraEngine**: unlike the other three
+candidates, it's a standalone headless C++ console application (no GUI/Qt in
+the engine itself, unlike Cura's frontend), which is architecturally the
+right shape for containerizing and for going multi-arch if its build
+publishes `linux/aarch64` -- at the cost of a lower-level CLI/config format
+and a new G-code-flavor adapter (`printlab/slicing/base.py`'s
+`SlicerBackend` abstraction exists to make exactly this kind of backend swap
+cheap).

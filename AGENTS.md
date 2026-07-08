@@ -30,6 +30,30 @@ read the pipeline's output and propose changes to CAD source in response.
   intentionally has no single 0–100 number in v0.1 (see `SETUP.md`
   deviations) — reason about the individual `checks[]` and `metrics{}`
   instead of hill-climbing a scalar.
+- **No slicer installed? Use `printlab check <example_dir>` instead of
+  `all`.** It runs build -> mesh -> evaluate -> report with slicing skipped
+  entirely — the mesh-derived checks (manifold, build-volume fit, wall
+  thickness) still produce a real verdict; slicer-derived metrics (filament
+  mass, print time, layer count) come back `null` in `metrics{}`, and the
+  `layer_height_allowed` check degrades to a `warning`, not an error. `all`
+  fails outright without a working slicer (`stage_slice` returns a
+  `binary_not_found` error); `check` is the sanctioned way to iterate on CAD
+  source without one.
+- **Try `printlab orient <example_dir>` before manually second-guessing a
+  part's build orientation.** It tries the 6 axis-aligned rotations of a
+  built part and recommends one by an explicit tie-break chain (minimize
+  overhang area, then maximize wall thickness, then minimize unsupported
+  span — see `printlab/mesh/orientation.py`), not a weighted score. It is
+  mesh-metrics-only (no re-slicing candidates) and not part of `printlab
+  all`.
+- **The sanctioned agent loop is `scripts/optimize_loop.py`, not an ad hoc
+  edit/rerun cycle.** It implements `repeat: edit CAD -> build -> evaluate
+  -> compare -> until the metric stops improving` as a pluggable
+  `propose_edit(source, last_result) -> str | None` callback around
+  `printlab.pipeline.run_check`/`run_all`, with a documented stopping rule
+  (no ERROR-level check remains and the target metric hasn't improved for
+  `patience` iterations, or the proposer returns `None`, or `max_iters` is
+  reached) and automatic CAD-source restore afterward.
 
 ## The artifact contract
 
@@ -73,9 +97,19 @@ JSON Schemas for every artifact are committed under `docs/schemas/*.json`
 
 ## Non-goals (don't propose these as fixes)
 
-Orientation search, mesh repair, a composite printability score, and
-manufacturing metrics that need real geometry research (minimum wall
-thickness, overhang histograms, bridge spans) are deliberately out of scope
-for v0.1 — see `SETUP.md`. Don't add ad-hoc versions of these inside an
-evaluation check; if one is genuinely needed, it belongs as a new pipeline
-stage with its own tests, not a special case bolted onto CAD source.
+A calibrated composite printability score is deliberately out of scope: an
+uncalibrated hand-weighted scalar is noise an agent would learn to game
+rather than a real signal (see `printlab/schemas/evaluation.py`). It needs
+calibration data — more example parts spanning known failure modes
+(`examples/thinwall`, `examples/bridge` exist for exactly this), ideally
+real print outcomes — before picking weights. Don't invent a weighted score
+inside an evaluation check as a workaround; reason about the individual
+`checks[]`/`metrics{}` instead.
+
+Full containerization (a multi-arch Docker image bundling a slicer) is also
+out of scope for now: the deterministic core is already multi-arch via
+`uv.lock` (see `docs/environment.md`), but the slicers are not, and
+packaging just the core without a slicer wasn't judged worth the extra
+layer yet. Note that orientation search, mesh repair, and the manufacturing
+metrics (minimum wall thickness, overhang histograms, bridge spans) are all
+already implemented (`printlab/mesh/`) — don't propose adding them.
