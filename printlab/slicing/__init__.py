@@ -11,11 +11,13 @@ from __future__ import annotations
 from printlab.schemas import Capabilities
 from printlab.slicing.bambu import BambuStudioBackend
 from printlab.slicing.base import PrusaLikeBackend, SlicerBackend
+from printlab.slicing.orcaslicer import OrcaSlicerBackend
 from printlab.slicing.prusaslicer import PrusaSlicerBackend
 
 _BACKENDS: dict[str, type[SlicerBackend]] = {
     "prusaslicer": PrusaSlicerBackend,
     "bambu": BambuStudioBackend,
+    "orcaslicer": OrcaSlicerBackend,
 }
 
 
@@ -36,6 +38,7 @@ def detect_all() -> dict[str, Capabilities]:
 
 __all__ = [
     "BambuStudioBackend",
+    "OrcaSlicerBackend",
     "PrusaLikeBackend",
     "PrusaSlicerBackend",
     "SlicerBackend",

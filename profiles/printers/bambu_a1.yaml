@@ -13,3 +13,6 @@ max_nozzle_temp_c: 300.0
 native_bundle:
   bambu: profiles/native/bambu/machine_bambu_a1_0.4_nozzle.json
   prusaslicer: profiles/native/prusaslicer/printer_generic_0.4.ini
+  # OrcaSlicer is Bambu Studio lineage and consumes the same machine JSON
+  # format -- verified directly, not assumed. See printlab.slicing.orcaslicer.
+  orcaslicer: profiles/native/bambu/machine_bambu_a1_0.4_nozzle.json

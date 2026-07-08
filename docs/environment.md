@@ -37,19 +37,30 @@ each run's `run_manifest.json` matches across runs/machines you're comparing.
 
 **Setup:**
 
-- macOS: `scripts/setup-macos.sh` (installs both slicers via Homebrew casks)
+- macOS: `scripts/setup-macos.sh` (installs all three slicers via Homebrew casks)
 - Linux: `scripts/setup-linux.sh` (PrusaSlicer via Flatpak — it publishes no
-  Linux binary on GitHub releases; Bambu Studio via a pinned AppImage URL)
+  Linux binary on GitHub releases; Bambu Studio and OrcaSlicer via pinned
+  AppImage URLs)
 
-**Why Bambu Studio's native profile resolution is not fully self-contained:**
-its preset JSON files use an `inherits` chain resolved against a system
-profile database bundled *inside the installed application*, not from the
-committed `profiles/native/bambu/*.json` file alone. This means Tier-1
-reproducibility for the Bambu backend additionally depends on both machines
-running the pinned BambuStudio version — which is exactly why `tool_versions`
-in `run_manifest.json` records it. PrusaSlicer's native `.ini` bundles don't
-have this issue: they're flat, fully self-contained key/value files PrintLab
-authored itself.
+**Why Bambu Studio's (and OrcaSlicer's) native profile resolution is not
+fully self-contained:** their preset JSON files use an `inherits` chain
+resolved against a system profile database bundled *inside the installed
+application*, not from the committed `profiles/native/bambu/*.json` file
+alone. This means Tier-1 reproducibility for these backends additionally
+depends on both machines running the same pinned application version —
+which is exactly why `tool_versions` in `run_manifest.json` records it.
+PrusaSlicer's native `.ini` bundles don't have this issue: they're flat,
+fully self-contained key/value files PrintLab authored itself.
+
+**Why there are three backends, not two:** PrusaSlicer is the reference/CI
+backend (stable, deterministic, no per-machine profile dependency). Bambu
+Studio and OrcaSlicer both serve the user's actual Bambu printer. OrcaSlicer
+was added after an evidence-based spike (see `printlab/slicing/orcaslicer.py`
+docstring) found its CLI and G-code conventions are nearly identical to
+Bambu Studio's — the original case for adding it ("richer CLI") didn't hold
+up under direct testing — but it bundles a substantially broader vendor
+profile library while remaining Bambu-compatible, which is a real, verified
+reason to keep both around rather than picking one.
 
 ## Layer 3: CAD software
 

@@ -24,8 +24,9 @@ uv run printlab all examples/bracket --backend prusaslicer
 
 This builds the example L-bracket, slices it, and writes every artifact to
 `examples/bracket/output/prusaslicer/`, including a human-readable
-`report.md`. Swap `--backend bambu` to slice with Bambu Studio instead — the
-same CAD source, profiles, and evaluation logic apply to both.
+`report.md`. Swap `--backend bambu` or `--backend orcaslicer` to slice with
+Bambu Studio or OrcaSlicer instead — the same CAD source, profiles, and
+evaluation logic apply to all three.
 
 See [`docs/environment.md`](docs/environment.md) for full environment setup
 (macOS/Linux setup scripts, the three-layer reproducibility model).
@@ -39,7 +40,7 @@ CAD source (part.py)
     -> slice (Bambu | Prusa)     -> slice_result.json, G-code
     -> gcode analysis (ours)     -> gcode_report.json      <- authoritative metrics
     -> evaluate                  -> printability_report.json
-    -> report                    -> report.md
+    -> report                    -> report.md, report.html
 ```
 
 Every run also writes `run_manifest.json`: tool versions, input/profile
@@ -52,10 +53,11 @@ provenance record that makes two runs comparable and an agent loop auditable.
 |------------------------------|-------------------------|-------------------------------------------------|
 | `part.step` / `part.stl`     | `printlab.cad`          | Pinned tessellation deflection                  |
 | `mesh_report.json`           | `printlab.mesh`         | Geometry only: manifold, bbox, volume, area     |
+| `mesh_repair_report.json`    | `printlab.mesh`         | Explicit-only (`printlab repair`), not in `all` |
 | `slice_result.json`          | `printlab.slicing`      | Backend-specific; `resolved_settings` is hashed |
 | `gcode_report.json`          | `printlab.gcode`        | Authoritative — see caveat below                |
 | `printability_report.json`   | `printlab.evaluation`   | Raw metrics + pass/warn/fail checks, no score   |
-| `report.md`                  | `printlab.reporting`    | Secondary, human-facing rendering                |
+| `report.md` / `report.html`  | `printlab.reporting`    | Secondary, human-facing rendering (same data)   |
 | `run_manifest.json`          | `printlab.provenance`   | Tool versions + content hashes                  |
 
 All artifacts share one envelope (`schema_version` / `status` / `errors[]`);
@@ -84,9 +86,14 @@ docstrings (`printlab/determinism.py`, `printlab/schemas/evaluation.py`,
 
 ## Status
 
-v0.1: one example part (`examples/bracket`), two working slicer backends
-(PrusaSlicer, Bambu Studio), the full pipeline above, with unit tests that
-need neither a CAD kernel nor a slicer, plus capability-gated integration
-tests. Deferred to later phases: orientation search, mesh repair,
-manufacturing-tractability metrics (min wall thickness, overhangs, bridges),
-a second example, and a calibrated composite score.
+v0.1 shipped one example part (`examples/bracket`), two working slicer
+backends (PrusaSlicer, Bambu Studio), and the full pipeline above. Since
+then: a second example (`examples/hook`, with a real cantilevered
+overhang), `quality`/`strength` process profiles alongside `draft`, the
+HTML report, basic mesh repair (`printlab repair`), and a third backend
+(OrcaSlicer, added after an evidence-based spike — see
+`printlab/slicing/orcaslicer.py`). Unit tests need neither a CAD kernel nor
+a slicer; integration
+tests are capability-gated. Deferred to later phases: orientation search,
+mesh repair, manufacturing-tractability metrics (min wall thickness,
+overhangs, bridges), and a calibrated composite score.

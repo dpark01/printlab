@@ -92,6 +92,28 @@
     "bbox": {
       "$ref": "#/$defs/BBox"
     },
+    "build_direction": {
+      "default": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Build Direction",
+      "type": "array"
+    },
     "errors": {
       "items": {
         "$ref": "#/$defs/ArtifactError"
@@ -111,6 +133,42 @@
     "manifold": {
       "title": "Manifold",
       "type": "boolean"
+    },
+    "max_unsupported_span_mm": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Unsupported Span Mm"
+    },
+    "min_wall_thickness_mm": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Min Wall Thickness Mm"
+    },
+    "overhang_area_mm2": {
+      "default": 0.0,
+      "title": "Overhang Area Mm2",
+      "type": "number"
+    },
+    "overhang_histogram": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "title": "Overhang Histogram",
+      "type": "object"
     },
     "schema_version": {
       "default": "0.1.0",

@@ -16,3 +16,8 @@ role = "Reference backend for CI and determinism."
 version = "02.07.01.62"
 homepage = "https://github.com/bambulab/BambuStudio"
 role = "Primary backend for Bambu Lab printers."
+
+[tools.orcaslicer]
+version = "2.4.2"
+homepage = "https://github.com/OrcaSlicer/OrcaSlicer"
+role = "Alternative Bambu-compatible backend with a broader vendor profile library."

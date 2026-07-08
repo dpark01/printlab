@@ -1,23 +1,17 @@
-"""Bambu Studio CLI backend: serves the user's actual printer, not the
-reference/CI backend (see printlab.slicing.prusaslicer for that role).
+"""OrcaSlicer CLI backend.
 
-Bambu Studio's self-reported slicing metrics are unreliable in practice: its
-`--export-slicedata` side-channel JSON has been observed reporting
-`total_used_g: 0.0` and `filament_density: 0` on a real slice, and even the
-emitted G-code header's own `total filament weight [g]` comment is `0.00`.
-printlab.gcode re-derives every metric except estimated time directly from
-the G-code for exactly this reason (see printlab.gcode.parser).
-
-Bambu's native settings are whole-preset JSON files that `inherits` from a
-system profile database bundled *inside the installed BambuStudio app*, not
-from the committed file alone -- so cross-machine Tier-1 reproducibility for
-this backend depends on both machines running the same pinned BambuStudio
-version (recorded in run_manifest.json's tool_versions), not solely on the
-committed profiles/native/bambu/ files. The small knob allowlist is applied
-by writing a patched copy of the process JSON (overriding its top-level
-keys, which is exactly how Bambu's own preset inheritance overrides work)
-rather than via separate CLI flags, since Bambu Studio's CLI has no
-per-setting override flags.
+Added after an evidence-based spike, not on reputation: OrcaSlicer's CLI
+flag surface and G-code conventions were found to be nearly identical to
+Bambu Studio's (same `--load-settings`/`--load-filaments` model, same
+`; CHANGE_LAYER` / `M83` G-code style, no per-setting override flags either
+-- our JSON-patching override mechanism was verified to work unchanged
+against OrcaSlicer). The genuine, verified advantage is that OrcaSlicer
+bundles a far broader vendor profile library (dozens of printer brands vs.
+Bambu Studio's narrow BBL-focused set) while remaining Bambu-compatible, and
+exposes more granular print-tuning keys in its config dump. Self-reported
+metrics are just as unreliable as Bambu Studio's (observed directly:
+`filament_density: 0` in its own G-code header) -- printlab.gcode re-derives
+everything except estimated time here too.
 """
 
 from __future__ import annotations
@@ -39,14 +33,17 @@ from printlab.schemas import (
 )
 from printlab.slicing.base import PrusaLikeBackend
 
-_VERSION_LINE_PREFIX = "BambuStudio-"
+_VERSION_LINE_PREFIX = "OrcaSlicer-"
 _BRIM_WIDTH_MM = "5"
 
 
-class BambuStudioBackend(PrusaLikeBackend):
-    name = "bambu"
-    binary_name = "BambuStudio"
-    candidate_paths = (Path("/Applications/BambuStudio.app/Contents/MacOS/BambuStudio"),)
+class OrcaSlicerBackend(PrusaLikeBackend):
+    name = "orcaslicer"
+    binary_name = "OrcaSlicer"
+    candidate_paths = (
+        Path.home() / "Applications" / "OrcaSlicer.app" / "Contents" / "MacOS" / "OrcaSlicer",
+        Path("/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer"),
+    )
 
     def _version(self, binary: Path) -> str | None:
         result = self.run_cli(binary, ["--help"], timeout=30)
@@ -58,7 +55,7 @@ class BambuStudioBackend(PrusaLikeBackend):
     def detect(self) -> Capabilities:
         binary = self.find_binary()
         if binary is None:
-            return Capabilities(backend=self.name, available=False, notes="BambuStudio binary not found")
+            return Capabilities(backend=self.name, available=False, notes="OrcaSlicer binary not found")
         return Capabilities(
             backend=self.name,
             available=True,
@@ -68,11 +65,10 @@ class BambuStudioBackend(PrusaLikeBackend):
             supports_bambu_machines=True,
             supports_orientation=True,
             supports_supports=True,
-            notes="Self-reported slicing metrics (result.json, G-code header filament "
-            "weight) have been observed to be zeroed/unreliable; printlab.gcode "
-            "re-derives all metrics except estimated time. Native profile "
-            "resolution depends on the installed BambuStudio version's bundled "
-            "system profile database, not solely on the committed bundle file.",
+            notes="Self-reported slicing metrics have been observed to be zeroed/unreliable "
+            "(same issue as Bambu Studio); printlab.gcode re-derives all metrics except "
+            "estimated time. Bundles a much broader vendor profile library than Bambu "
+            "Studio while remaining Bambu-compatible.",
         )
 
     def _patched_process_settings(
@@ -81,7 +77,7 @@ class BambuStudioBackend(PrusaLikeBackend):
         with process_native_path.open("r") as fh:
             data = json.load(fh)
         data.update(overrides)
-        patched_path = output_dir / "resolved_process.bambu.json"
+        patched_path = output_dir / "resolved_process.orcaslicer.json"
         with patched_path.open("w") as fh:
             json.dump(data, fh, indent=2, sort_keys=True)
         return patched_path
@@ -103,7 +99,7 @@ class BambuStudioBackend(PrusaLikeBackend):
                 errors=[
                     ArtifactError(
                         code="binary_not_found",
-                        message="BambuStudio binary not found on this machine.",
+                        message="OrcaSlicer binary not found on this machine.",
                         stage="slicing",
                     )
                 ],
@@ -125,7 +121,8 @@ class BambuStudioBackend(PrusaLikeBackend):
                 errors=[
                     ArtifactError(
                         code="native_bundle_missing",
-                        message="Printer/material/process profile is missing a 'bambu' native_bundle entry.",
+                        message="Printer/material/process profile is missing an "
+                        "'orcaslicer' native_bundle entry.",
                         stage="slicing",
                     )
                 ],
@@ -138,18 +135,17 @@ class BambuStudioBackend(PrusaLikeBackend):
         output_dir.mkdir(parents=True, exist_ok=True)
         input_model = Path(request.input_model).resolve()
 
-        # Bambu preset JSONs are flat key overrides on top of an inherited
-        # base -- patching these top-level keys on a copy is the same
-        # mechanism Bambu's own preset system uses, applied programmatically.
-        bambu_overrides = {
+        # Same flat key-override mechanism as Bambu Studio (verified to work
+        # unchanged against OrcaSlicer) -- see printlab.slicing.bambu.
+        orca_overrides = {
             "layer_height": str(settings["layer_height_mm"]),
             "sparse_infill_density": f"{settings['infill_percent']}%",
             "enable_support": "1" if settings["supports"] else "0",
             "brim_width": _BRIM_WIDTH_MM if settings["brim"] else "0",
         }
         if settings["wall_count"] is not None:
-            bambu_overrides["wall_loops"] = str(settings["wall_count"])
-        patched_process_path = self._patched_process_settings(Path(process_path), bambu_overrides, output_dir)
+            orca_overrides["wall_loops"] = str(settings["wall_count"])
+        patched_process_path = self._patched_process_settings(Path(process_path), orca_overrides, output_dir)
 
         args = [
             "--load-settings",
@@ -170,9 +166,7 @@ class BambuStudioBackend(PrusaLikeBackend):
 
         # Content hashes of the base (pre-override) bundles, not absolute
         # paths: a hash computed on one machine/clone location must be
-        # comparable to one computed on another. Combined with `settings`
-        # (the override values patched on top), this fully determines the
-        # effective config without needing to hash the generated patched copy.
+        # comparable to one computed on another.
         resolved_settings = {
             "native_bundle_hashes": {
                 machine_path.name: hash_file(machine_path),
@@ -187,9 +181,7 @@ class BambuStudioBackend(PrusaLikeBackend):
         backend_version = self._version(binary) or "unknown"
 
         # The G-code file actually existing is the authoritative success
-        # signal, not the exit code -- see printlab.slicing.prusaslicer for
-        # why (never trust a slicer's self-reported status, applied to exit
-        # codes as much as to metrics).
+        # signal, not the exit code -- see printlab.slicing.prusaslicer.
         if not gcode_path.is_file():
             return SliceResult(
                 backend=self.name,
@@ -198,7 +190,7 @@ class BambuStudioBackend(PrusaLikeBackend):
                 errors=[
                     ArtifactError(
                         code="slice_failed",
-                        message=(result.stderr or result.stdout or "BambuStudio exited non-zero").strip()[
+                        message=(result.stderr or result.stdout or "OrcaSlicer exited non-zero").strip()[
                             -2000:
                         ],
                         stage="slicing",
@@ -212,7 +204,7 @@ class BambuStudioBackend(PrusaLikeBackend):
         warnings = []
         if result.returncode != 0:
             warnings.append(
-                f"BambuStudio exited with code {result.returncode} but wrote G-code anyway: "
+                f"OrcaSlicer exited with code {result.returncode} but wrote G-code anyway: "
                 + (result.stderr or result.stdout or "").strip()[-500:]
             )
 

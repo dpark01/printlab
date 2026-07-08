@@ -14,6 +14,8 @@ dependencies = [
     "pydantic>=2.9,<3",
     "pyyaml>=6.0,<7",
     "numpy>=1.26,<3",
+    "networkx>=3.0,<4",  # required by trimesh.repair.fill_holes
+    "rtree>=1.2,<2",  # required by trimesh's ray-triangle intersector (wall thickness)
 ]
 
 [project.scripts]

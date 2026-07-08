@@ -55,6 +55,21 @@ def mesh(example_dir: Path, backend: str = _BackendOption, output: Path | None =
     typer.echo(report.model_dump_json(indent=2))
 
 
+@app.command()
+def repair(example_dir: Path, backend: str = _BackendOption, output: Path | None = _OutputOption) -> None:
+    """Attempt cheap mesh repair on part.stl -> mesh_repair_report.json.
+
+    Not part of `printlab all`: CadQuery-sourced STLs are already clean by
+    construction. This is for STL input from a source PrintLab doesn't
+    control the origin of.
+    """
+    config = pipeline.load_part_config(example_dir)
+    output_dir = _resolve_output_dir(config, backend, output)
+    stl_path = output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
+    report = pipeline.stage_repair(stl_path, output_dir)
+    typer.echo(report.model_dump_json(indent=2))
+
+
 @app.command(name="slice")
 def slice_cmd(example_dir: Path, backend: str = _BackendOption, output: Path | None = _OutputOption) -> None:
     """Slice part.stl with the chosen backend -> slice_result.json + G-code."""
@@ -125,6 +140,7 @@ def report(example_dir: Path, backend: str = _BackendOption, output: Path | None
         config, mesh_report, slice_result, gcode_report, printability, manifest, output_dir
     )
     typer.echo(f"wrote {report_path}")
+    typer.echo(f"wrote {output_dir / pipeline.ARTIFACT_FILENAMES['report_html']}")
 
 
 @app.command(name="all")

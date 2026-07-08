@@ -1,0 +1,16 @@
+# Wall count and infill match Bambu Lab's own official "0.20mm Strength @BBL
+# A1" preset (6 wall loops, 25% infill) rather than an arbitrary guess --
+# more wall loops contributes more to FDM part strength than raising infill
+# density further, which is why BBL ships this combination rather than
+# fewer walls + much higher infill.
+schema_version: "0.1.0"
+name: "strength"
+layer_height_mm: 0.2
+infill_percent: 25.0
+supports: false
+brim: false
+wall_count: 6
+native_bundle:
+  bambu: profiles/native/bambu/process_strength_0.2.json
+  prusaslicer: profiles/native/prusaslicer/process_strength_0.2.ini
+  orcaslicer: profiles/native/bambu/process_strength_0.2.json

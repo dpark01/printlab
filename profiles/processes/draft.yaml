@@ -14,3 +14,4 @@ wall_count: 2
 native_bundle:
   bambu: profiles/native/bambu/process_draft_0.2.json
   prusaslicer: profiles/native/prusaslicer/process_draft_0.2.ini
+  orcaslicer: profiles/native/bambu/process_draft_0.2.json

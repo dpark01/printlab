@@ -36,6 +36,13 @@ _LAYER_HEIGHT_RE = re.compile(r"^;\s*(?:LAYER_)?HEIGHT\s*:\s*([0-9.]+)\s*$")
 
 _E_PARAM_RE = re.compile(r"[Ee](-?[0-9]*\.?[0-9]+)")
 
+# Layer-height comments carry real floating point noise across hundreds of
+# layers (observed directly: PrusaSlicer emitting ";HEIGHT:0.199997" through
+# ";HEIGHT:0.200001" for a nominal 0.2mm layer height in the same file).
+# Rounding to the micron before bucketing collapses that noise into one
+# canonical value instead of reporting a noisy mode like 0.200001.
+_LAYER_HEIGHT_NDIGITS = 3
+
 _DURATION_PATTERNS = (
     re.compile(r"total estimated time\s*:\s*([0-9dhms .]+)", re.IGNORECASE),
     re.compile(r"estimated printing time \(normal mode\)\s*=\s*([0-9dhms .]+)", re.IGNORECASE),
@@ -120,7 +127,7 @@ def parse_gcode(text: str) -> ParsedGcode:
                 continue
             height_match = _LAYER_HEIGHT_RE.match(line)
             if height_match:
-                layer_heights.append(float(height_match.group(1)))
+                layer_heights.append(round(float(height_match.group(1)), _LAYER_HEIGHT_NDIGITS))
             continue
 
         code = line.split(None, 1)[0].upper() if line.split(None, 1) else ""

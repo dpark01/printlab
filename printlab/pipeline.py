@@ -24,12 +24,14 @@ from printlab.determinism import hash_artifact
 from printlab.evaluation import evaluate as evaluate_printability
 from printlab.gcode import analyze as analyze_gcode
 from printlab.mesh import analyze as analyze_mesh
+from printlab.mesh import repair as repair_mesh
 from printlab.profiles import load_material_profile, load_printer_profile, load_process_profile
 from printlab.provenance import build_run_manifest, finalize_manifest, hash_inputs
-from printlab.reporting import render_markdown
+from printlab.reporting import render_html, render_markdown
 from printlab.schemas import (
     GCodeReport,
     MaterialProfile,
+    MeshRepairReport,
     MeshReport,
     PrintabilityReport,
     PrinterProfile,
@@ -44,10 +46,13 @@ ARTIFACT_FILENAMES = {
     "step": "part.step",
     "stl": "part.stl",
     "mesh_report": "mesh_report.json",
+    "mesh_repair_report": "mesh_repair_report.json",
+    "stl_repaired": "part_repaired.stl",
     "slice_result": "slice_result.json",
     "gcode_report": "gcode_report.json",
     "printability_report": "printability_report.json",
     "report": "report.md",
+    "report_html": "report.html",
     "run_manifest": "run_manifest.json",
 }
 
@@ -137,6 +142,18 @@ def stage_mesh(stl_path: Path, output_dir: Path) -> MeshReport:
     return report
 
 
+def stage_repair(stl_path: Path, output_dir: Path) -> MeshRepairReport:
+    """Not part of `run_all()`'s critical path: CadQuery-sourced STLs are
+    already clean by construction (see printlab.mesh.repair docstring), so
+    this is an explicitly-invoked capability for STL input PrintLab doesn't
+    control the origin of, not an automatic step in the standard pipeline.
+    """
+    output_path = output_dir / ARTIFACT_FILENAMES["stl_repaired"]
+    report = repair_mesh(stl_path, output_path=output_path)
+    _write_json_atomic(output_dir / ARTIFACT_FILENAMES["mesh_repair_report"], report)
+    return report
+
+
 def stage_slice(
     config: PartConfig,
     stl_path: Path,
@@ -199,6 +216,17 @@ def stage_report(
     )
     report_path = output_dir / ARTIFACT_FILENAMES["report"]
     report_path.write_text(text)
+
+    html_text = render_html(
+        part_name=config.name,
+        mesh=mesh,
+        slice_result=slice_result,
+        gcode=gcode,
+        printability=printability,
+        manifest=manifest,
+    )
+    (output_dir / ARTIFACT_FILENAMES["report_html"]).write_text(html_text)
+
     return report_path
 
 

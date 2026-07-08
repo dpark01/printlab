@@ -75,8 +75,12 @@ def _check_layer_height_allowed(gcode: GCodeReport, printer: PrinterProfile) -> 
             status=Status.WARNING,
             message="Layer height could not be determined from G-code.",
         )
+    # 1 micron: real slicer G-code carries floating point noise across
+    # hundreds of layers (observed directly: PrusaSlicer height comments
+    # ranging 0.199997-0.200001 for a nominal 0.2mm layer height in one
+    # file) -- 1e-6mm would be sub-nanometer precision, meaningless here.
     allowed = printer.allowed_layer_heights_mm
-    ok = any(abs(gcode.layer_height_mm - h) < 1e-6 for h in allowed)
+    ok = any(abs(gcode.layer_height_mm - h) < 1e-3 for h in allowed)
     return PrintabilityCheck(
         name="layer_height_allowed",
         status=Status.OK if ok else Status.WARNING,
@@ -89,18 +93,50 @@ def _check_layer_height_allowed(gcode: GCodeReport, printer: PrinterProfile) -> 
     )
 
 
+def _check_min_wall_thickness(mesh: MeshReport, printer: PrinterProfile) -> PrintabilityCheck:
+    # WARNING, not ERROR, on either branch: this is a documented
+    # approximation (see printlab.mesh.wall_thickness), not an exact
+    # measurement, so it shouldn't be treated as certain as e.g. the
+    # manifold/build-volume checks.
+    if mesh.min_wall_thickness_mm is None:
+        return PrintabilityCheck(
+            name="min_wall_thickness",
+            status=Status.WARNING,
+            message="Wall thickness could not be estimated (ray casting produced no usable samples).",
+        )
+    ok = mesh.min_wall_thickness_mm >= printer.min_feature_size_mm
+    return PrintabilityCheck(
+        name="min_wall_thickness",
+        status=Status.OK if ok else Status.WARNING,
+        message=(
+            f"Estimated wall thickness {mesh.min_wall_thickness_mm:.2f}mm meets "
+            f"{printer.name}'s {printer.min_feature_size_mm}mm minimum feature size."
+            if ok
+            else f"Estimated wall thickness {mesh.min_wall_thickness_mm:.2f}mm is below "
+            f"{printer.name}'s {printer.min_feature_size_mm}mm minimum feature size "
+            "(approximate -- see printlab.mesh.wall_thickness limitations)."
+        ),
+        metric_value=mesh.min_wall_thickness_mm,
+        threshold=printer.min_feature_size_mm,
+    )
+
+
 def evaluate(mesh: MeshReport, gcode: GCodeReport, printer: PrinterProfile) -> PrintabilityReport:
     checks = [
         _check_manifold(mesh),
         _check_self_intersection(mesh),
         _check_build_volume_fit(mesh, printer),
         _check_layer_height_allowed(gcode, printer),
+        _check_min_wall_thickness(mesh, printer),
     ]
 
-    metrics: dict[str, float | int | bool | str] = {
+    metrics: dict[str, float | int | bool | str | None] = {
         "volume_mm3": mesh.volume_mm3,
         "surface_area_mm2": mesh.surface_area_mm2,
         "shell_count": mesh.shell_count,
+        "overhang_area_mm2": mesh.overhang_area_mm2,
+        "min_wall_thickness_mm": mesh.min_wall_thickness_mm,
+        "max_unsupported_span_mm": mesh.max_unsupported_span_mm,
         "layer_count": gcode.layer_count,
         "filament_length_mm": gcode.filament_length_mm,
         "filament_mass_g": gcode.filament_mass_g,

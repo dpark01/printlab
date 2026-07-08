@@ -57,6 +57,20 @@ def test_retract_prime_cycle_does_not_double_count():
     assert result.filament_length_mm == pytest.approx(6.0)
 
 
+def test_noisy_layer_heights_collapse_to_a_canonical_value():
+    """Regression test: real PrusaSlicer output has been observed emitting
+    ;HEIGHT:0.199997 through ;HEIGHT:0.200001 for a nominal 0.2mm layer
+    height across one file (floating point noise accumulated over hundreds
+    of layers). These must collapse to one canonical value, not report a
+    noisy mode like 0.200001."""
+    lines = ["M82", "G92 E0"]
+    noisy_heights = ["0.199997", "0.2", "0.200001", "0.199999", "0.2", "0.2"]
+    for height in noisy_heights:
+        lines += [";LAYER_CHANGE", f";HEIGHT:{height}", "G1 X1 Y1 E0.1"]
+    result = parse_gcode("\n".join(lines))
+    assert result.layer_height_mm == pytest.approx(0.2)
+
+
 def test_no_layer_markers_returns_zero_layers():
     result = parse_gcode("G1 X1 Y1\nG1 X2 Y2\n")
     assert result.layer_count == 0

@@ -5,6 +5,194 @@
 
 ---
 
+# Implementation Status (as of 2026-07-07)
+
+This document is the original design draft and is kept as-is below for
+historical reference. This section tracks what has actually been built
+against it, and what remains. See `README.md` for the day-to-day quickstart
+and `AGENTS.md` for the agent operating rules; specific deviations from this
+draft's assumptions are documented in-line in the relevant module docstrings
+(`printlab/determinism.py`, `printlab/schemas/evaluation.py`,
+`printlab/gcode/parser.py`, `printlab/mesh/wall_thickness.py`,
+`printlab/slicing/orcaslicer.py`) rather than repeated here.
+
+## Done
+
+**v0.1 vertical slice** (one part, one backend, full abstraction):
+- Python package (`uv`-managed), Typer CLI, `pyproject.toml`/`uv.lock`/`.python-version`
+- Printer/material/process profile system: the 3-part split (engineering
+  constraints + native config bundle + small override allowlist) rather than
+  a universal slicer schema
+- CAD backend: CadQuery (the draft's other option; not build123d)
+- Generic slicer abstraction (`SlicerBackend` / `PrusaLikeBackend`)
+- Mesh analysis via trimesh: manifold, watertight, self-intersection
+  heuristic, shell count, bbox, volume, surface area
+- Structured JSON reports: Pydantic v2, a shared `schema_version`/`status`/
+  `errors[]` envelope, committed JSON Schemas under `docs/schemas/`
+- Markdown reports
+- One example parametric model (`examples/bracket`)
+- Unit tests requiring neither a CAD kernel nor a slicer; capability-gated
+  integration tests
+- GitHub Actions CI (fast lane + heavy lane + a `requirements.txt`/`uv.lock`
+  sync check)
+- Provenance (`run_manifest.json`: tool versions + content hashes) and a
+  three-tier reproducibility contract (`printlab/determinism.py`) --
+  verified empirically (two independent runs into different directories
+  produce hash-identical normalized artifacts), not just asserted
+- Environment reproducibility: `tools.toml` pins, `printlab doctor`,
+  `scripts/setup-macos.sh` / `scripts/setup-linux.sh`
+- Bambu Studio CLI adapter
+- PrusaSlicer CLI adapter
+
+**Phase A -- round out the vertical slice (all five items done):**
+- A.1 second example part, `examples/hook`, with a genuine cantilevered
+  overhang the bracket doesn't have
+- A.2 `quality`/`strength` process profiles alongside `draft` (surfaced and
+  fixed a real bug along the way: `wall_count` was documented as part of the
+  override allowlist but never actually resolved or passed to a backend)
+- A.3 HTML report (`printlab/reporting/html.py`)
+- A.4 basic mesh repair (`printlab/mesh/repair.py`, `printlab repair` CLI
+  command) -- not wired into `printlab all`'s critical path; explicitly
+  invoked, since CadQuery-sourced STLs are already clean by construction
+- A.5 OrcaSlicer evaluated and added as a third backend. The original
+  justification ("richer CLI") did not hold up under direct testing -- its
+  CLI and G-code conventions turned out nearly identical to Bambu Studio's --
+  but it bundles a substantially broader vendor profile library while
+  remaining Bambu-compatible, which is a real, verified reason to keep it
+  (`printlab/slicing/orcaslicer.py`)
+
+**Phase B -- manufacturing-tractability metrics (B.6-B.8 done, B.9 not started):**
+- B.6 overhang histogram (`printlab/mesh/overhangs.py`): per-face-normal
+  classification against a build direction, bucketed by angle from vertical
+- B.7 minimum wall thickness estimation (`printlab/mesh/wall_thickness.py`):
+  went through two real bugs (inward-vs-outward ray direction, a backward
+  epsilon nudge that made every face read exactly the epsilon value) and one
+  real design finding (reporting the strict minimum across faces is
+  fundamentally fragile at sharp edges -- even a single plain capped
+  cylinder falsely read ~4.6mm instead of its true ~12mm diameter; a low
+  percentile across faces is the standard, more robust fix) -- see the
+  module docstring for the full account
+- B.8 unsupported span ("bridge") detection (`printlab/mesh/bridges.py`):
+  connected-component grouping of overhang faces, reporting the longest
+  region's projected span
+
+## Not done -- a handoff for whoever (or whichever agent) picks this up next
+
+This section is written so a fresh agent with no memory of prior sessions can
+act on it directly: concrete files to create, what to reuse, and open
+questions to resolve rather than assume.
+
+### B.9 Orientation search -- not started
+
+**Goal:** try several candidate rotations of a built part, re-run mesh
+analysis (and optionally slicing) for each, and recommend the best
+orientation by the metrics that already exist -- no new hard-geometry work
+needed, this is an orchestration layer over B.6-B.8.
+
+**Why it matters concretely:** `examples/hook` was deliberately designed so
+its natural CAD orientation (mounting plate vertical, as used) has a bad
+~32mm unsupported cantilever (see `max_unsupported_span_mm` in its
+`mesh_report.json`). Rotating the part 90 degrees about X so the arm points
+straight up during printing should eliminate that overhang almost entirely.
+Demonstrating this concretely on the hook is the natural acceptance test for
+this feature.
+
+**Suggested approach:**
+1. New module `printlab/mesh/orientation.py` (or a `printlab/orientation/`
+   package if it grows): a function like
+   `search_orientations(mesh, candidate_rotations) -> list[OrientationCandidate]`
+   that, for each candidate rotation (a set of `(axis, degrees)` or a
+   rotation matrix), applies the rotation to a *copy* of the mesh (trimesh
+   supports `mesh.copy()` + `mesh.apply_transform()`), re-runs
+   `printlab.mesh.overhangs.compute_overhangs`,
+   `printlab.mesh.wall_thickness.estimate_min_wall_thickness_mm`, and
+   `printlab.mesh.bridges.estimate_max_unsupported_span_mm` against the
+   rotated copy (mesh volume/surface area are rotation-invariant, no need to
+   recompute), and records the results.
+2. A simple, explicit candidate set is enough for v0.1: the 6 axis-aligned
+   orientations (rotations that put each of +X/-X/+Y/-Y/+Z/-Z as the "up"
+   direction) rather than a full continuous search -- this is cheap (6
+   evaluations) and covers the common real cases including the hook's fix.
+3. Comparison/ranking: with no composite score (see C.10), rank candidates
+   by a simple, explicit tie-break chain documented in code, e.g. minimize
+   `overhang_area_mm2` first, then maximize `min_wall_thickness_mm`, then
+   minimize `max_unsupported_span_mm` -- do not invent a weighted scalar
+   here; that is exactly what C.10 is for once there's calibration data.
+4. New schema: an `OrientationSearchReport` (or similar) in
+   `printlab/schemas/` listing each candidate's rotation + metrics + which
+   one was selected and why, following the existing artifact envelope
+   (`schema_version`/`status`/`errors[]` -- see `printlab/schemas/common.py`).
+   Regenerate `docs/schemas/*.json` via `scripts/generate_schemas.py` after
+   adding it, or `tests/unit/test_schemas.py::test_committed_json_schemas_are_up_to_date`
+   will fail CI.
+5. Pipeline/CLI wiring: a new `printlab.pipeline.stage_orientation_search`
+   and a `printlab orient <example_dir>` command, following the existing
+   stage pattern in `printlab/pipeline.py` (see `stage_mesh`/`stage_repair`
+   for the shape: compute, write JSON atomically via `_write_json_atomic`,
+   return the report). Whether to also re-slice each candidate (not just
+   re-analyze the mesh) is an open question -- re-slicing 6x is slower but
+   would let ranking include `estimated_time_s`/support volume from
+   `gcode_report.json` too; a reasonable v1 scope is mesh-metrics-only
+   ranking, with a note that slicing the winning orientation to confirm is
+   a natural follow-up.
+6. Tests: unit tests using synthetic meshes with a known-bad default
+   orientation (e.g. reuse the suspended-shelf rig from
+   `tests/unit/test_mesh_overhangs.py`/`test_mesh_bridges.py`, which has an
+   obvious best rotation), plus an integration-style check against the real
+   `examples/hook` part confirming the search recommends rotating away from
+   the default orientation.
+
+### Phase C -- scoring & the agent loop -- not started
+
+**C.10: a calibrated composite printability score.** Deliberately deferred
+in v0.1 (see `printlab/schemas/evaluation.py` docstring) because an
+uncalibrated hand-weighted scalar is noise an agent would learn to game
+rather than a real signal. Do not add this by just picking weights that
+"feel right" -- that repeats the mistake this draft's v0.1 already backed
+away from. What "calibration data" concretely means: run the pipeline
+across a range of example parts (more than the current two) and, ideally,
+real print outcomes (did it actually print successfully?), then fit or
+justify weights against that data. Practically, this probably wants a third
+and fourth example part first (e.g. something with a known-bad wall
+thickness, something requiring real support material) to have enough
+variety to calibrate against. Until then, the individual metrics/checks in
+`printability_report.json` remain the source of truth.
+
+**C.11: an agent optimization loop.** The loop this draft originally
+specified (`repeat: edit CAD -> build -> evaluate -> compare -> until score
+no longer improves`) lives *outside* the engineering modules by this
+draft's own design rule -- it should be a new orchestration script or CLI
+command (e.g. `printlab optimize` or a separate `scripts/optimize_loop.py`),
+not inside `printlab/pipeline.py`, and it must not itself become the source
+of engineering truth. Concretely it needs: (a) a way to propose a CAD-source
+edit (this is where an LLM/agent plugs in -- PrintLab itself stays
+LLM-agnostic per its core philosophy, so this orchestration layer should
+accept a pluggable "propose an edit" callback rather than hard-coding a
+model call), (b) re-running `printlab.pipeline.run_all` after each edit, and
+(c) a stopping rule. A stopping rule can start simple even without C.10 --
+e.g. "stop when no ERROR-level check remains and the last N iterations
+didn't reduce `filament_mass_g`/improve the specific metric you're
+optimizing" -- a single composite score makes this cleaner but isn't a hard
+prerequisite.
+
+### Phase D and beyond -- not yet scoped in detail
+
+A vision loop, FEA, and containerization remain as originally drafted below
+this section, with one refinement worth recording: a vision-*capable* coding
+agent already has the "vision model" built into itself (it can view an image
+via its own tool use). What Phase D actually needs from PrintLab is
+therefore likely just a cheap `render` capability (CAD/mesh -> a PNG, e.g.
+via `trimesh.Scene.save_image()` or a CadQuery/OCP viewport export), not a
+bespoke vision-model API integration -- the "loop" part (agent looks,
+proposes, validates, iterates) is then just an agent using that render
+alongside the existing JSON artifacts, which already works today with zero
+additional PrintLab infrastructure once `render` exists. This makes a
+`render` stage a candidate to pull forward ahead of the rest of Phase D if
+it becomes useful sooner (it's cheap, mechanical work comparable to Phase A
+items, not a big lift like FEA or containerization).
+
+---
+
 # Vision
 
 PrintLab is **not** an AI CAD assistant.

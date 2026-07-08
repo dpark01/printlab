@@ -10,7 +10,7 @@ echo "==> Installing Python dependencies (uv sync)"
 uv sync
 
 echo "==> Installing native slicers (Homebrew casks)"
-brew install --cask prusaslicer bambu-studio
+brew install --cask prusaslicer bambu-studio orcaslicer
 
 echo "==> Verifying installed versions against tools.toml"
 uv run printlab doctor

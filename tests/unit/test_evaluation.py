@@ -31,6 +31,7 @@ def _mesh(**overrides) -> MeshReport:
         bbox=BBox(min=(0, 0, 0), max=(10, 10, 10)),
         surface_area_mm2=600.0,
         volume_mm3=1000.0,
+        min_wall_thickness_mm=2.0,
     )
     defaults.update(overrides)
     return MeshReport(**defaults)
@@ -76,12 +77,37 @@ def test_part_exceeding_build_volume_is_an_error():
     assert check.status is Status.ERROR
 
 
+def test_wall_thinner_than_min_feature_size_is_a_warning():
+    mesh = _mesh(min_wall_thickness_mm=0.1)  # printer min_feature_size_mm is 0.4
+    report = evaluate(mesh, _gcode(), _printer())
+    assert report.status is Status.WARNING
+    check = next(c for c in report.checks if c.name == "min_wall_thickness")
+    assert check.status is Status.WARNING
+
+
+def test_unknown_wall_thickness_is_a_warning_not_a_pass():
+    mesh = _mesh(min_wall_thickness_mm=None)
+    report = evaluate(mesh, _gcode(), _printer())
+    check = next(c for c in report.checks if c.name == "min_wall_thickness")
+    assert check.status is Status.WARNING
+
+
 def test_unusual_layer_height_is_a_warning():
     gcode = _gcode(layer_height_mm=0.37)
     report = evaluate(_mesh(), gcode, _printer())
     assert report.status is Status.WARNING
     check = next(c for c in report.checks if c.name == "layer_height_allowed")
     assert check.status is Status.WARNING
+
+
+def test_layer_height_within_floating_point_noise_still_passes():
+    """Regression test: real slicer G-code has been observed reporting
+    e.g. 0.200001mm for a nominal 0.2mm layer height (see
+    printlab.gcode.parser). That must still pass this check."""
+    gcode = _gcode(layer_height_mm=0.200001)
+    report = evaluate(_mesh(), gcode, _printer())
+    check = next(c for c in report.checks if c.name == "layer_height_allowed")
+    assert check.status is Status.OK
 
 
 def test_overlapping_shells_is_a_warning_not_a_failure():

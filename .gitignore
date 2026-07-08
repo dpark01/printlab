@@ -22,3 +22,6 @@ output/
 *.3mf.tmp
 # Bambu Studio writes this to the cwd on some invocations, even outside output/
 /result.json
+# Bambu Studio/OrcaSlicer write numbered logs to the cwd when thumbnail
+# rendering fails headlessly (no OpenGL context), even outside output/
+/[0-9][0-9][0-9][0-9][0-9].log

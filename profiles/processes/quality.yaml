@@ -1,0 +1,14 @@
+# Finer layer resolution than draft.yaml, same wall count/infill -- matches
+# Bambu Lab's own "0.12mm Fine" preset philosophy: quality comes from Z
+# resolution here, not from extra walls.
+schema_version: "0.1.0"
+name: "quality"
+layer_height_mm: 0.12
+infill_percent: 15.0
+supports: false
+brim: false
+wall_count: 2
+native_bundle:
+  bambu: profiles/native/bambu/process_quality_0.12.json
+  prusaslicer: profiles/native/prusaslicer/process_quality_0.12.ini
+  orcaslicer: profiles/native/bambu/process_quality_0.12.json

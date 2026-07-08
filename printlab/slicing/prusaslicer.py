@@ -127,6 +127,8 @@ class PrusaSlicerBackend(PrusaLikeBackend):
         ]
         if settings["supports"]:
             args.append("--support-material")
+        if settings["wall_count"] is not None:
+            args += ["--perimeters", str(settings["wall_count"])]
         args += [
             "--export-gcode",
             "--output",
@@ -148,7 +150,14 @@ class PrusaSlicerBackend(PrusaLikeBackend):
         )
         backend_version = self._version(binary) or "unknown"
 
-        if result.returncode != 0 or not gcode_path.is_file():
+        # The G-code file actually existing is the authoritative success
+        # signal, not the exit code: PrusaSlicer has been observed returning
+        # non-zero after printing an advisory ("consider enabling
+        # supports/brim") even though it finished writing valid G-code.
+        # Consistent with never trusting a slicer's self-reported status
+        # (see printlab.gcode.parser docstring) -- only a missing G-code
+        # file is a hard failure here.
+        if not gcode_path.is_file():
             return SliceResult(
                 backend=self.name,
                 backend_version=backend_version,
@@ -167,11 +176,19 @@ class PrusaSlicerBackend(PrusaLikeBackend):
                 resolved_settings_sha256=resolved_settings_hash,
             )
 
+        warnings = []
+        if result.returncode != 0:
+            warnings.append(
+                f"PrusaSlicer exited with code {result.returncode} but wrote G-code anyway: "
+                + (result.stderr or result.stdout or "").strip()[-500:]
+            )
+
         return SliceResult(
             backend=self.name,
             backend_version=backend_version,
             gcode_path=gcode_path,
             resolved_settings=resolved_settings,
             resolved_settings_sha256=resolved_settings_hash,
-            status=Status.OK,
+            status=Status.OK if not warnings else Status.WARNING,
+            warnings=warnings,
         )

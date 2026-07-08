@@ -9,3 +9,4 @@ bed_temp_c: [45.0, 60.0]
 native_bundle:
   bambu: profiles/native/bambu/filament_generic_pla.json
   prusaslicer: profiles/native/prusaslicer/filament_generic_pla.ini
+  orcaslicer: profiles/native/bambu/filament_generic_pla.json

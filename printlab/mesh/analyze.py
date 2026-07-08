@@ -1,10 +1,10 @@
 """Mesh analysis: printlab.mesh.analyze() -> MeshReport.
 
-v0.1 covers geometry metrics only (manifold/watertight/shells/bbox/surface
-area/volume). Manufacturing-tractability metrics that need real geometry
-research (minimum wall thickness via shape-diameter/SDF, overhangs via facet
-normals, bridge spans) are genuinely hard problems and are explicitly
-deferred to Phase 2 rather than faked here (see SETUP.md deviations).
+Geometry metrics only (manifold/watertight/shells/bbox/surface area/volume/
+overhangs/wall thickness/unsupported spans). Overhang analysis (see
+printlab.mesh.overhangs), wall thickness (see printlab.mesh.wall_thickness),
+and unsupported span detection (see printlab.mesh.bridges) are bounded,
+documented approximations -- not slicer-accurate simulations.
 
 Self-intersection detection is likewise a hard problem in general (exact
 triangle-pair testing needs a real boolean engine). v0.1 implements a
@@ -20,6 +20,9 @@ from pathlib import Path
 import trimesh
 
 from printlab.determinism import hash_file
+from printlab.mesh.bridges import estimate_max_unsupported_span_mm
+from printlab.mesh.overhangs import DEFAULT_BUILD_DIRECTION, compute_overhangs
+from printlab.mesh.wall_thickness import estimate_min_wall_thickness_mm
 from printlab.schemas import ArtifactError, BBox, MeshReport, Status
 
 
@@ -44,10 +47,17 @@ def _shell_bbox_overlap_count(shells: list[trimesh.Trimesh]) -> int:
     return count
 
 
-def analyze(stl_path: Path) -> MeshReport:
+def analyze(
+    stl_path: Path, build_direction: tuple[float, float, float] = DEFAULT_BUILD_DIRECTION
+) -> MeshReport:
     """Load an STL and compute geometry metrics. Never raises: load failures
     are reported as a Status.ERROR MeshReport with a structured ArtifactError,
-    so a pipeline caller can branch on `.status` instead of catching exceptions."""
+    so a pipeline caller can branch on `.status` instead of catching exceptions.
+
+    `build_direction` assumes the part is analyzed in its as-designed
+    orientation (+Z) unless told otherwise -- see printlab.mesh.overhangs and
+    the (deferred) orientation-search work for varying this.
+    """
     stl_path = Path(stl_path)
 
     try:
@@ -87,6 +97,10 @@ def analyze(stl_path: Path) -> MeshReport:
     bounds = mesh.bounds  # shape (2, 3): [min, max]
     bbox = BBox(min=tuple(float(v) for v in bounds[0]), max=tuple(float(v) for v in bounds[1]))
 
+    overhang_histogram, overhang_area_mm2 = compute_overhangs(mesh, build_direction=build_direction)
+    min_wall_thickness_mm = estimate_min_wall_thickness_mm(mesh)
+    max_unsupported_span_mm = estimate_max_unsupported_span_mm(mesh, build_direction=build_direction)
+
     status = Status.OK
     errors: list[ArtifactError] = []
     if not watertight or not manifold:
@@ -111,6 +125,11 @@ def analyze(stl_path: Path) -> MeshReport:
         bbox=bbox,
         surface_area_mm2=float(mesh.area),
         volume_mm3=float(mesh.volume),
+        build_direction=build_direction,
+        overhang_area_mm2=overhang_area_mm2,
+        overhang_histogram=overhang_histogram,
+        min_wall_thickness_mm=min_wall_thickness_mm,
+        max_unsupported_span_mm=max_unsupported_span_mm,
         status=status,
         errors=errors,
     )

@@ -98,6 +98,18 @@
       ],
       "default": null,
       "title": "Supports"
+    },
+    "wall_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Wall Count"
     }
   },
   "required": [

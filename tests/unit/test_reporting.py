@@ -1,8 +1,8 @@
-"""Markdown report rendering tests."""
+"""Markdown and HTML report rendering tests."""
 
 from __future__ import annotations
 
-from printlab.reporting import render_markdown
+from printlab.reporting import render_html, render_markdown
 from printlab.schemas import (
     BBox,
     GCodeReport,
@@ -64,3 +64,43 @@ def test_render_markdown_includes_key_sections():
     assert "PASS" in text
     assert "manifold_watertight" in text
     assert "0.1.0" in text
+
+
+def test_render_html_includes_key_sections_and_is_well_formed():
+    mesh, slice_result, gcode, printability, manifest = _sample_artifacts()
+    text = render_html(
+        part_name="bracket",
+        mesh=mesh,
+        slice_result=slice_result,
+        gcode=gcode,
+        printability=printability,
+        manifest=manifest,
+    )
+    assert text.startswith("<!DOCTYPE html>")
+    assert "</html>" in text
+    assert "bracket" in text
+    assert "prusaslicer" in text
+    assert "2.9.6" in text
+    assert "PASS" in text
+    assert "manifold_watertight" in text
+    assert "0.1.0" in text
+
+
+def test_render_html_escapes_untrusted_text_fields():
+    """Check messages could in principle contain arbitrary text; the HTML
+    renderer must not let that break out of its containing element."""
+    mesh, slice_result, gcode, printability, manifest = _sample_artifacts()
+    unsafe_check = printability.checks[0].model_copy(
+        update={"message": '<script>alert(1)</script> & "quoted"'}
+    )
+    printability = printability.model_copy(update={"checks": [unsafe_check]})
+    text = render_html(
+        part_name="bracket",
+        mesh=mesh,
+        slice_result=slice_result,
+        gcode=gcode,
+        printability=printability,
+        manifest=manifest,
+    )
+    assert "<script>" not in text
+    assert "&lt;script&gt;" in text

@@ -37,5 +37,16 @@ echo "Bambu Studio AppImage: $BAMBU_APPIMAGE"
 echo "Add it to PATH as 'BambuStudio', e.g.:"
 echo "  ln -sf \"$BAMBU_APPIMAGE\" ~/.local/bin/BambuStudio"
 
+echo "==> Downloading OrcaSlicer 2.4.2 (pinned AppImage)"
+ORCA_APPIMAGE="$TOOLS_DIR/OrcaSlicer-2.4.2.AppImage"
+ORCA_URL="https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.4.2/OrcaSlicer_Linux_AppImage_Ubuntu2404_V2.4.2.AppImage"
+if [ ! -f "$ORCA_APPIMAGE" ]; then
+    curl -L -o "$ORCA_APPIMAGE" "$ORCA_URL"
+    chmod +x "$ORCA_APPIMAGE"
+fi
+echo "OrcaSlicer AppImage: $ORCA_APPIMAGE"
+echo "Add it to PATH as 'OrcaSlicer', e.g.:"
+echo "  ln -sf \"$ORCA_APPIMAGE\" ~/.local/bin/OrcaSlicer"
+
 echo "==> Verifying installed versions against tools.toml"
 uv run printlab doctor

@@ -1,0 +1,12 @@
+# Example part configuration for `printlab build|mesh|slice|... examples/hook`.
+# Paths are resolved relative to the repository root.
+
+[part]
+name = "hook"
+module = "part.py"
+function = "build"
+
+[profiles]
+printer = "profiles/printers/bambu_a1.yaml"
+material = "profiles/materials/pla.yaml"
+process = "profiles/processes/draft.yaml"

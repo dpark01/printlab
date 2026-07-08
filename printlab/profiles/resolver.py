@@ -51,6 +51,7 @@ class ResolvedProcessSettings:
     infill_percent: ResolvedOverride
     supports: ResolvedOverride
     brim: ResolvedOverride
+    wall_count: ResolvedOverride
 
     def as_dict(self) -> dict[str, Any]:
         """Effective values only, suitable for hashing into provenance."""
@@ -59,6 +60,7 @@ class ResolvedProcessSettings:
             "infill_percent": self.infill_percent.value,
             "supports": self.supports.value,
             "brim": self.brim.value,
+            "wall_count": self.wall_count.value,
         }
 
 
@@ -67,6 +69,9 @@ def resolve_process_overrides(request: SliceRequest, process: ProcessProfile) ->
 
     The native config bundle is the implicit base layer underneath this: each
     backend loads it first, then applies these resolved values on top.
+    `wall_count` may resolve to None (neither request nor profile set it) --
+    backends must treat that as "no override, use the native bundle's own
+    default" rather than passing a literal None through to a CLI flag.
     """
 
     def resolve(request_value: Any, profile_value: Any) -> ResolvedOverride:
@@ -79,4 +84,5 @@ def resolve_process_overrides(request: SliceRequest, process: ProcessProfile) ->
         infill_percent=resolve(request.infill_percent, process.infill_percent),
         supports=resolve(request.supports, process.supports),
         brim=resolve(request.brim, process.brim),
+        wall_count=resolve(request.wall_count, process.wall_count),
     )

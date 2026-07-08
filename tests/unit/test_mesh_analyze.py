@@ -25,6 +25,11 @@ def test_analyze_manifold_box(tmp_path: Path):
     assert report.surface_area_mm2 == pytest.approx(600.0)
     assert report.shell_count == 1
     assert report.self_intersecting is False
+    # A box resting flush on the bed has no overhangs: top is upward-facing,
+    # sides are vertical, bottom rests on the bed (see printlab.mesh.overhangs).
+    assert report.overhang_area_mm2 == 0.0
+    assert report.min_wall_thickness_mm == pytest.approx(10.0, abs=0.5)
+    assert report.max_unsupported_span_mm is None
 
 
 def test_analyze_two_disjoint_shells(tmp_path: Path):

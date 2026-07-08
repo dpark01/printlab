@@ -63,6 +63,8 @@ multidict==6.7.1
     #   yarl
 multimethod==1.12
     # via cadquery
+networkx==3.6.1
+    # via printlab
 nlopt==2.10.0
     # via cadquery
 numba==0.66.0
@@ -112,6 +114,8 @@ pyyaml==6.0.3
     #   trame
 rich==15.0.0
     # via typer
+rtree==1.4.1
+    # via printlab
 ruff==0.15.20
 runtype==0.5.3
     # via cadquery

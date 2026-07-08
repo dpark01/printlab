@@ -17,7 +17,7 @@ from printlab.schemas.common import (
 )
 from printlab.schemas.evaluation import PrintabilityCheck, PrintabilityReport
 from printlab.schemas.gcode import GCodeReport
-from printlab.schemas.mesh import MeshReport
+from printlab.schemas.mesh import MeshRepairReport, MeshReport
 from printlab.schemas.profiles import MaterialProfile, PrinterProfile, ProcessProfile
 from printlab.schemas.provenance import RunManifest
 from printlab.schemas.slicing import Capabilities, SliceRequest, SliceResult
@@ -29,6 +29,7 @@ __all__ = [
     "Capabilities",
     "GCodeReport",
     "MaterialProfile",
+    "MeshRepairReport",
     "MeshReport",
     "PrintLabArtifact",
     "PrintabilityCheck",
@@ -45,6 +46,7 @@ __all__ = [
 #: docs/schemas/. Keep in sync with __all__ above; tests assert this.
 ARTIFACT_MODELS = [
     MeshReport,
+    MeshRepairReport,
     SliceRequest,
     SliceResult,
     GCodeReport,

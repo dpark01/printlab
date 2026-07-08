@@ -27,7 +27,7 @@ class PrintabilityCheck(BaseModel):
 class PrintabilityReport(PrintLabArtifact):
     model_config = ConfigDict(extra="forbid")
 
-    metrics: dict[str, float | int | bool | str] = Field(default_factory=dict)
+    metrics: dict[str, float | int | bool | str | None] = Field(default_factory=dict)
     checks: list[PrintabilityCheck] = Field(default_factory=list)
 
     @property

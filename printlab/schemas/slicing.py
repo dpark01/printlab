@@ -40,6 +40,7 @@ class SliceRequest(BaseModel):
     supports: bool | None = None
     brim: bool | None = None
     infill_percent: float | None = None
+    wall_count: int | None = None
     layer_height_mm: float | None = None
 
 
