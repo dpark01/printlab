@@ -15,7 +15,7 @@ from printlab.determinism import hash_artifact
 from printlab.slicing import get_backend
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "examples"
-EXAMPLE_NAMES = ("bracket", "hook")
+EXAMPLE_NAMES = ("bracket", "hook", "canoe")
 
 pytestmark = pytest.mark.integration
 

@@ -17,7 +17,10 @@ from printlab import pipeline
 from printlab.determinism import hash_artifact
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "examples"
-EXAMPLE_NAMES = ("bracket", "hook", "thinwall", "bridge")
+# canoe persistently reports printability status "warning" (engraved side
+# lettering trips min_wall_thickness via ray-cast noise on sharp corners);
+# harmless here since this suite only asserts run-to-run hash equality.
+EXAMPLE_NAMES = ("bracket", "hook", "thinwall", "bridge", "canoe")
 
 pytestmark = pytest.mark.integration
 
