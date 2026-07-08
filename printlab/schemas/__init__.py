@@ -18,6 +18,7 @@ from printlab.schemas.common import (
 from printlab.schemas.evaluation import PrintabilityCheck, PrintabilityReport
 from printlab.schemas.gcode import GCodeReport
 from printlab.schemas.mesh import MeshRepairReport, MeshReport
+from printlab.schemas.orientation import OrientationCandidate, OrientationSearchReport
 from printlab.schemas.profiles import MaterialProfile, PrinterProfile, ProcessProfile
 from printlab.schemas.provenance import RunManifest
 from printlab.schemas.slicing import Capabilities, SliceRequest, SliceResult
@@ -31,6 +32,8 @@ __all__ = [
     "MaterialProfile",
     "MeshRepairReport",
     "MeshReport",
+    "OrientationCandidate",
+    "OrientationSearchReport",
     "PrintLabArtifact",
     "PrintabilityCheck",
     "PrintabilityReport",
@@ -47,6 +50,7 @@ __all__ = [
 ARTIFACT_MODELS = [
     MeshReport,
     MeshRepairReport,
+    OrientationSearchReport,
     SliceRequest,
     SliceResult,
     GCodeReport,

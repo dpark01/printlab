@@ -1,0 +1,170 @@
+{
+  "$defs": {
+    "ArtifactError": {
+      "additionalProperties": false,
+      "description": "A single structured failure, so an agent can branch without parsing prose.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "context": {
+          "additionalProperties": true,
+          "title": "Context",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "stage"
+      ],
+      "title": "ArtifactError",
+      "type": "object"
+    },
+    "OrientationCandidate": {
+      "additionalProperties": false,
+      "description": "One candidate rotation and its re-evaluated manufacturing metrics.\n\n`rotation_axis`/`rotation_degrees` describe the rotation applied to a\n*copy* of the part before re-evaluating at the default build direction\n(0, 0, 1) -- see printlab.mesh.orientation. `None` on\n`min_wall_thickness_mm`/`max_unsupported_span_mm` carries the same\nmeaning as in MeshReport (see printlab.schemas.mesh).",
+      "properties": {
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "max_unsupported_span_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Unsupported Span Mm"
+        },
+        "min_wall_thickness_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Wall Thickness Mm"
+        },
+        "overhang_area_mm2": {
+          "title": "Overhang Area Mm2",
+          "type": "number"
+        },
+        "overhang_histogram": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Overhang Histogram",
+          "type": "object"
+        },
+        "rotation_axis": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Rotation Axis",
+          "type": "array"
+        },
+        "rotation_degrees": {
+          "title": "Rotation Degrees",
+          "type": "number"
+        }
+      },
+      "required": [
+        "label",
+        "rotation_axis",
+        "rotation_degrees",
+        "overhang_area_mm2"
+      ],
+      "title": "OrientationCandidate",
+      "type": "object"
+    },
+    "Status": {
+      "description": "Outcome of a stage, or of a single evaluation check.",
+      "enum": [
+        "ok",
+        "warning",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "printlab.mesh.orientation.orient() -> orientation_search_report.json.\n\nNot part of `printlab all`'s critical path (like mesh_repair_report.json)\n-- explicitly invoked via `printlab orient`. `selected_index` indexes\ninto `candidates`; `selection_reason` documents the tie-break chain that\npicked it (see printlab.mesh.orientation.rank_candidates) rather than a\nweighted score.",
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/OrientationCandidate"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "errors": {
+      "items": {
+        "$ref": "#/$defs/ArtifactError"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "input_path": {
+      "format": "path",
+      "title": "Input Path",
+      "type": "string"
+    },
+    "input_sha256": {
+      "title": "Input Sha256",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "selected_index": {
+      "title": "Selected Index",
+      "type": "integer"
+    },
+    "selection_reason": {
+      "title": "Selection Reason",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/Status",
+      "default": "ok"
+    }
+  },
+  "required": [
+    "input_path",
+    "input_sha256",
+    "selected_index",
+    "selection_reason"
+  ],
+  "title": "OrientationSearchReport",
+  "type": "object"
+}

@@ -24,6 +24,7 @@ from printlab.determinism import hash_artifact
 from printlab.evaluation import evaluate as evaluate_printability
 from printlab.gcode import analyze as analyze_gcode
 from printlab.mesh import analyze as analyze_mesh
+from printlab.mesh import orient as search_orientation
 from printlab.mesh import repair as repair_mesh
 from printlab.profiles import load_material_profile, load_printer_profile, load_process_profile
 from printlab.provenance import build_run_manifest, finalize_manifest, hash_inputs
@@ -33,6 +34,7 @@ from printlab.schemas import (
     MaterialProfile,
     MeshRepairReport,
     MeshReport,
+    OrientationSearchReport,
     PrintabilityReport,
     PrinterProfile,
     ProcessProfile,
@@ -48,6 +50,7 @@ ARTIFACT_FILENAMES = {
     "mesh_report": "mesh_report.json",
     "mesh_repair_report": "mesh_repair_report.json",
     "stl_repaired": "part_repaired.stl",
+    "orientation_search_report": "orientation_search_report.json",
     "slice_result": "slice_result.json",
     "gcode_report": "gcode_report.json",
     "printability_report": "printability_report.json",
@@ -151,6 +154,16 @@ def stage_repair(stl_path: Path, output_dir: Path) -> MeshRepairReport:
     output_path = output_dir / ARTIFACT_FILENAMES["stl_repaired"]
     report = repair_mesh(stl_path, output_path=output_path)
     _write_json_atomic(output_dir / ARTIFACT_FILENAMES["mesh_repair_report"], report)
+    return report
+
+
+def stage_orientation_search(stl_path: Path, output_dir: Path) -> OrientationSearchReport:
+    """Not part of `run_all()`'s critical path (like stage_repair): explicit
+    orchestration over B.6-B.8's metrics, mesh-metrics-only ranking (no
+    re-slicing candidates -- see SETUP.md B.9).
+    """
+    report = search_orientation(stl_path)
+    _write_json_atomic(output_dir / ARTIFACT_FILENAMES["orientation_search_report"], report)
     return report
 
 

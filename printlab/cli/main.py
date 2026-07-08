@@ -1,4 +1,4 @@
-"""PrintLab CLI: printlab build|mesh|slice|gcode|evaluate|report|check|all|doctor <example_dir>
+"""PrintLab CLI: printlab build|mesh|repair|orient|slice|gcode|evaluate|report|check|all|doctor <example_dir>
 
 Every subcommand operates against `<example_dir>/output/<backend>/`, the one
 self-contained deterministic output-directory bundle for a (part, backend)
@@ -69,6 +69,21 @@ def repair(example_dir: Path, backend: str = _BackendOption, output: Path | None
     output_dir = _resolve_output_dir(config, backend, output)
     stl_path = output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
     report = pipeline.stage_repair(stl_path, output_dir)
+    typer.echo(report.model_dump_json(indent=2))
+
+
+@app.command()
+def orient(example_dir: Path, backend: str = _BackendOption, output: Path | None = _OutputOption) -> None:
+    """Try axis-aligned rotations of part.stl -> orientation_search_report.json.
+
+    Mesh-metrics-only ranking (no re-slicing candidates); not part of
+    `printlab all`. See printlab.mesh.orientation for the tie-break chain
+    used to pick a winner.
+    """
+    config = pipeline.load_part_config(example_dir)
+    output_dir = _resolve_output_dir(config, backend, output)
+    stl_path = output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
+    report = pipeline.stage_orientation_search(stl_path, output_dir)
     typer.echo(report.model_dump_json(indent=2))
 
 
