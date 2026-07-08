@@ -45,6 +45,18 @@ Split so the parts that don't need native tools stay unit-testable:
 real captured `ccx` output fixture (`tests/fixtures/fea/sample.frd`); only
 `mesh.py` needs `gmsh` and only `solve.py` needs `ccx`.
 
+**Linux system dependency, easy to miss:** `pip install`/`uv sync --extra
+fea` alone is not enough on Linux. `gmsh`'s compiled extension `dlopen()`s
+`libGLU` at import time -- even though PrintLab only calls its headless
+meshing API, never its GUI/OpenGL viewer -- so a system missing that shared
+library fails with `OSError: libGLU.so.1: cannot open shared object file`,
+not an install error. On Debian/Ubuntu: `apt-get install libglu1-mesa`
+(pulled in automatically on most desktop Linux installs, but not on a bare
+CI runner or minimal container -- this bit CI directly before it was added
+to `.github/workflows/ci.yml`). Tests guard against this with
+`tests.conftest.skip_unless_importable()` rather than plain
+`pytest.importorskip()`, since the latter only catches `ImportError`.
+
 ## Load case
 
 FEA needs to know where a part is held and where a load is applied. This is

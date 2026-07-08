@@ -2,9 +2,12 @@
 check the result against Euler-Bernoulli beam theory.
 
 Self-skips exactly like the slicer-dependent integration tests: `gmsh` must be
-importable (the `fea` extra) and a CalculiX binary must be found. We use
-printlab.fea.solve.find_ccx_binary() rather than shutil.which("ccx") because
-the binary is commonly installed version-suffixed (e.g. `ccx_2.23`).
+importable (the `fea` extra) and a CalculiX binary must be found. Uses
+skip_unless_importable() rather than pytest.importorskip() directly because
+gmsh's C extension dlopen()s libGLU at import time, which raises OSError (not
+ImportError) when that shared library is missing -- see tests.conftest. We
+use printlab.fea.solve.find_ccx_binary() rather than shutil.which("ccx")
+because the binary is commonly installed version-suffixed (e.g. `ccx_2.23`).
 """
 
 from __future__ import annotations
@@ -15,7 +18,9 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("gmsh")
+from tests.conftest import skip_unless_importable
+
+skip_unless_importable("gmsh")
 
 from printlab import pipeline  # noqa: E402
 from printlab.fea import analyze, solve  # noqa: E402

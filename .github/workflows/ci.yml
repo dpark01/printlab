@@ -34,8 +34,12 @@ jobs:
       # CLI solver that's genuinely apt-installable here. Non-fatal: if
       # Ubuntu's package lags Debian's, tests/integration/test_fea_hook.py
       # and test_mcp_smoke.py's FEA case self-skip via shutil.which("ccx"),
-      # same as the slicer self-skip pattern below.
-      - run: sudo apt-get update && sudo apt-get install -y calculix-ccx || true
+      # same as the slicer self-skip pattern below. libglu1-mesa is a
+      # separate, easy-to-miss requirement: gmsh's C extension dlopen()s
+      # libGLU at import time even though we only use its headless meshing
+      # API, never its GUI/OpenGL viewer -- observed directly as an OSError
+      # ("libGLU.so.1: cannot open shared object file") on a bare runner.
+      - run: sudo apt-get update && sudo apt-get install -y calculix-ccx libglu1-mesa || true
       - run: uv sync --extra fea --extra mcp
       # No slicer is installed on this runner, so tests/integration's
       # slicer-dependent cases self-skip via backend.detect().available

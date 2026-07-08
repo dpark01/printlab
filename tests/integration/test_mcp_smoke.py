@@ -53,7 +53,9 @@ def test_fea_returns_structured_result():
     default, which only Python's main thread may do -- FastMCP dispatches
     sync tools off-thread, so this failed until mesh.py passed
     interruptible=False (see printlab.fea.mesh)."""
-    pytest.importorskip("gmsh")
+    from tests.conftest import skip_unless_importable
+
+    skip_unless_importable("gmsh")
     from printlab.fea.solve import find_ccx_binary
 
     if find_ccx_binary() is None:
