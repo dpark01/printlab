@@ -35,8 +35,8 @@ from pydantic import BaseModel
 #: printlab.gcode.parser docstring) -- the file's content hash is therefore
 #: exactly as volatile as a timestamp, even though the *metrics* PrintLab
 #: parses out of it are stable. Path fields (`input_path`, `gcode_path`,
-#: `project_path`) are excluded too, so a hash computed on one machine/clone
-#: location is comparable to one computed on another.
+#: `project_path`, `output_path`) are excluded too, so a hash computed on one
+#: machine/clone location is comparable to one computed on another.
 VOLATILE_KEYS: frozenset[str] = frozenset(
     {
         "created_at",
@@ -48,6 +48,7 @@ VOLATILE_KEYS: frozenset[str] = frozenset(
         "input_path",
         "gcode_path",
         "project_path",
+        "output_path",
     }
 )
 

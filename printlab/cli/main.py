@@ -1,4 +1,5 @@
-"""PrintLab CLI: printlab build|mesh|repair|orient|slice|gcode|evaluate|report|check|all|doctor <example_dir>
+"""PrintLab CLI: printlab build|mesh|repair|orient|render|slice|gcode|
+evaluate|report|check|all|doctor <example_dir>
 
 Every subcommand operates against `<example_dir>/output/<backend>/`, the one
 self-contained deterministic output-directory bundle for a (part, backend)
@@ -16,6 +17,7 @@ from pathlib import Path
 import typer
 
 from printlab import pipeline
+from printlab.rendering import DEFAULT_VIEWS, CameraView
 from printlab.schemas import GCodeReport, MeshReport, PrintabilityReport, RunManifest, SliceResult
 from printlab.slicing import available_backend_names, detect_all
 from printlab.toolchain import load_pinned_tools
@@ -30,6 +32,13 @@ _BackendOption = typer.Option("prusaslicer", "--backend", "-b", help="Slicer bac
 _OutputOption = typer.Option(
     None, "--output", "-o", help="Output directory (default: <example_dir>/output/<backend>)."
 )
+_ViewOption = typer.Option(
+    list(DEFAULT_VIEWS), "--view", help="Preset name(s): iso/front/back/left/right/top/bottom."
+)
+_ElevationOption = typer.Option(None, "--elevation", help="Custom camera elevation, degrees.")
+_AzimuthOption = typer.Option(None, "--azimuth", help="Custom camera azimuth, degrees.")
+_WidthOption = typer.Option(800, "--width")
+_HeightOption = typer.Option(600, "--height")
 
 
 def _resolve_output_dir(config: pipeline.PartConfig, backend: str, output: Path | None) -> Path:
@@ -84,6 +93,37 @@ def orient(example_dir: Path, backend: str = _BackendOption, output: Path | None
     output_dir = _resolve_output_dir(config, backend, output)
     stl_path = output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
     report = pipeline.stage_orientation_search(stl_path, output_dir)
+    typer.echo(report.model_dump_json(indent=2))
+
+
+@app.command()
+def render(
+    example_dir: Path,
+    view: list[str] = _ViewOption,
+    elevation: float | None = _ElevationOption,
+    azimuth: float | None = _AzimuthOption,
+    width: int = _WidthOption,
+    height: int = _HeightOption,
+    backend: str = _BackendOption,
+    output: Path | None = _OutputOption,
+) -> None:
+    """Render part.stl to PNG(s) -> render_report.json + render_*.png.
+
+    Renders the `--view` presets by default; pass both `--elevation` and
+    `--azimuth` to render one custom angle instead. Not part of `printlab
+    all`. The PNGs are not hashed for reproducibility (matplotlib-version
+    dependent, like `part.stl`); only `render_report.json`'s camera metadata
+    is.
+    """
+    config = pipeline.load_part_config(example_dir)
+    output_dir = _resolve_output_dir(config, backend, output)
+    stl_path = output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
+    views: list[str | CameraView]
+    if elevation is not None and azimuth is not None:
+        views = [CameraView("custom", elevation, azimuth)]
+    else:
+        views = list(view)
+    report = pipeline.stage_render(stl_path, output_dir, views=views, width_px=width, height_px=height)
     typer.echo(report.model_dump_json(indent=2))
 
 

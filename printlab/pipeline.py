@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import shutil
 import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from printlab.mesh import orient as search_orientation
 from printlab.mesh import repair as repair_mesh
 from printlab.profiles import load_material_profile, load_printer_profile, load_process_profile
 from printlab.provenance import build_run_manifest, finalize_manifest, hash_inputs
+from printlab.rendering import DEFAULT_VIEWS, CameraView
+from printlab.rendering import render as render_part
 from printlab.reporting import render_html, render_markdown
 from printlab.schemas import (
     GCodeReport,
@@ -38,6 +41,7 @@ from printlab.schemas import (
     PrintabilityReport,
     PrinterProfile,
     ProcessProfile,
+    RenderReport,
     RunManifest,
     SliceRequest,
     SliceResult,
@@ -51,6 +55,7 @@ ARTIFACT_FILENAMES = {
     "mesh_repair_report": "mesh_repair_report.json",
     "stl_repaired": "part_repaired.stl",
     "orientation_search_report": "orientation_search_report.json",
+    "render_report": "render_report.json",
     "slice_result": "slice_result.json",
     "gcode_report": "gcode_report.json",
     "printability_report": "printability_report.json",
@@ -164,6 +169,24 @@ def stage_orientation_search(stl_path: Path, output_dir: Path) -> OrientationSea
     """
     report = search_orientation(stl_path)
     _write_json_atomic(output_dir / ARTIFACT_FILENAMES["orientation_search_report"], report)
+    return report
+
+
+def stage_render(
+    stl_path: Path,
+    output_dir: Path,
+    *,
+    views: Sequence[str | CameraView] = DEFAULT_VIEWS,
+    width_px: int = 800,
+    height_px: int = 600,
+) -> RenderReport:
+    """Not part of `run_all()`'s critical path (like stage_repair/
+    stage_orientation_search): an explicit, image-producing capability. The
+    PNGs themselves are not part of the reproducibility contract -- only this
+    JSON's camera metadata is (see printlab.schemas.rendering).
+    """
+    report = render_part(stl_path, output_dir, views=views, width_px=width_px, height_px=height_px)
+    _write_json_atomic(output_dir / ARTIFACT_FILENAMES["render_report"], report)
     return report
 
 
