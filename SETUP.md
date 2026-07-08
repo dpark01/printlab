@@ -110,6 +110,23 @@ draft's assumptions are documented in-line in the relevant module docstrings
   are the "third and fourth example part" C.10 calls for below, added ahead
   of the score itself since they're useful calibration data regardless of
   when weights get picked.
+- A third example, `examples/canoe`, joined all three golden/integration
+  `EXAMPLE_NAMES` suites -- its persistent `warning` status (engraved-text
+  wall-thickness ray-cast noise) is harmless to every assertion in those
+  files, which check hash-reproducibility and slice success, not overall
+  printability status.
+- `printlab render` (`printlab/rendering/`, Phase D's vision-loop
+  prerequisite, pulled forward -- see below): matplotlib/Agg offscreen PNG
+  rendering from named presets or an arbitrary camera angle, with a
+  `RenderReport` recording the deterministic camera metadata (never the PNG
+  bytes, which -- like `part.stl` -- are rendering-library-version
+  dependent). Needed zero new dependencies: matplotlib is already resolved
+  transitively via `vtk`/`cadquery-ocp`.
+- FEA v1 (`printlab/fea/`, `printlab fea`) -- see its own entry under Phase D
+  below for the full account.
+- An MCP server and two Claude Code skills (`printlab_mcp/`,
+  `.claude/skills/`) -- see the "Adapters may be built later" note under
+  Phase D below.
 
 ## Not done -- a handoff for whoever (or whichever agent) picks this up next
 
@@ -117,22 +134,32 @@ This section is written so a fresh agent with no memory of prior sessions can
 act on it directly: concrete files to create, what to reuse, and open
 questions to resolve rather than assume.
 
-### Phase C -- scoring -- C.10 not started, C.11 done
+### Phase C -- scoring -- C.10 partly landed (uncalibrated), C.11 done
 
-**C.10: a calibrated composite printability score.** Still deliberately
-deferred (see `printlab/schemas/evaluation.py` docstring) because an
-uncalibrated hand-weighted scalar is noise an agent would learn to game
-rather than a real signal. Do not add this by just picking weights that
-"feel right" -- that repeats the mistake this draft's v0.1 already backed
-away from. What "calibration data" concretely means: run the pipeline across
-a range of example parts and, ideally, real print outcomes (did it actually
-print successfully?), then fit or justify weights against that data. The
-variety this needed -- "something with a known-bad wall thickness, something
-requiring real support material" -- now exists (`examples/thinwall`,
-`examples/bridge`, alongside the clean `bracket`, the cantilevered `hook`,
-and the hollow `canoe`); what's still missing is real print-outcome data and
-the actual fitting/justification work. Until then, the individual
-metrics/checks in `printability_report.json` remain the source of truth.
+**C.10: a calibrated composite printability score.** The prior deferral was
+reconsidered: rather than waiting indefinitely for calibration data,
+`printability_report.json` now carries a `provisional_score` (0-100) and a
+`score_calibrated: bool` field that is `False` in every v1 report --
+deliberately machine-readable, not just a docstring warning, so a caller can
+branch on "is this trustworthy" without reading anything. The formula
+(`printlab/evaluation/printability.py`) is a fixed, arbitrary penalty per
+failing check (`ERROR_PENALTY = 40`, `WARNING_PENALTY = 10`, floored at 0) --
+deliberately not per-metric weights, since weights are exactly what would
+need real calibration; a flat penalty is a more honest placeholder. What
+"calibration data" concretely means is unchanged: run the pipeline across a
+range of example parts and, ideally, real print outcomes (did it actually
+print successfully?), then fit or justify real weights against that data --
+the variety this needs ("something with a known-bad wall thickness,
+something requiring real support material") already exists (`examples/
+thinwall`, `examples/bridge`, alongside `bracket`/`hook`/`canoe`); what's
+still missing is real print-outcome data and the fitting work itself, at
+which point `score_calibrated` can flip to `True`. Until then, treat
+`provisional_score` as triage-only and the individual `checks[]`/`metrics{}`
+as the source of truth -- `scripts/optimize_loop.py` targets a specific
+named metric, never this score, and B.9's `rank_candidates()` deliberately
+does not use it either (see `printlab/mesh/orientation.py`: a coarse
+whole-part triage integer would discard the resolution its tie-break chain
+needs, and orientation candidates don't even run the full check suite).
 
 **C.11: an agent optimization loop -- done (`scripts/optimize_loop.py`).**
 Lives *outside* the engineering modules, as this draft's own design rule
@@ -155,21 +182,83 @@ numerically -- a broken design isn't a valid candidate to compare against.
 The example's CAD source is restored to its original content when the loop
 returns, regardless of outcome.
 
-### Phase D and beyond -- not yet scoped in detail, except containerization
+### Phase D -- vision loop prerequisite and FEA v1 done; full vision loop still open
 
-A vision loop and FEA remain as originally drafted below this section, with
-one refinement worth recording: a vision-*capable* coding agent already has
-the "vision model" built into itself (it can view an image via its own tool
-use). What Phase D actually needs from PrintLab is therefore likely just a
-cheap `render` capability (CAD/mesh -> a PNG, e.g. via
-`trimesh.Scene.save_image()` or a CadQuery/OCP viewport export), not a
-bespoke vision-model API integration -- the "loop" part (agent looks,
-proposes, validates, iterates) is then just an agent using that render
-alongside the existing JSON artifacts, which already works today with zero
-additional PrintLab infrastructure once `render` exists. This makes a
-`render` stage a candidate to pull forward ahead of the rest of Phase D if
-it becomes useful sooner (it's cheap, mechanical work comparable to Phase A
-items, not a big lift like FEA).
+**`render` -- done, pulled forward as this draft's own note anticipated.**
+The refinement recorded here previously has held up in practice: a
+vision-*capable* coding agent already has the "vision model" built into
+itself (it can view an image via its own tool use), so what Phase D actually
+needed from PrintLab was just a cheap `render` capability, not a bespoke
+vision-model API integration. `printlab render <example_dir>` (`printlab/
+rendering/`) renders `part.stl` to PNGs via matplotlib's Agg backend --
+already a transitive dependency (via `vtk`/`cadquery-ocp`), so this needed
+zero new installs, and Agg's pure-offscreen rasterization sidesteps the
+headless-GL problem that rules out `trimesh.Scene.save_image()` (needs
+`pyglet` and a GL context, neither available here) -- from either named
+presets (`iso`/`front`/`back`/`left`/`right`/`top`/`bottom`) or an arbitrary
+`--elevation`/`--azimuth`. A `render_report.json` records the deterministic
+camera metadata; the PNG bytes themselves are deliberately never hashed
+(matplotlib-version-dependent, the same reasoning that already excludes
+`part.stl`'s bytes). The full vision *loop* (agent looks, proposes,
+validates, iterates) is now literally just an agent calling `printlab
+render` alongside the existing JSON artifacts -- no further PrintLab
+infrastructure needed; that loop itself remains unscoped/undemonstrated as
+a concrete workflow.
+
+**FEA v1 -- done (`printlab/fea/`, `printlab fea`), scoped to a single
+linear-static case.** Evaluated CalculiX, Elmer FEM, and FreeCAD's FEM
+workbench; chose **CalculiX**: a free, actively-maintained, pure-CLI solver
+that maps directly onto the existing `tools.toml`/`printlab doctor`/
+graceful-skip pattern the three slicers already use, and -- unlike them --
+is a small enough headless package to actually install in CI
+(`apt-get install calculix-ccx`). FreeCAD's FEM workbench turned out to be a
+GUI wrapper *around* CalculiX/Elmer anyway (no unique capability, much
+heavier dependency); Elmer needed more scaffolding for no benefit here.
+
+Meshes from **STEP, not STL** -- a real, verified architectural choice: an
+STL is unparametrized "triangle soup" that resists clean tetrahedralization,
+while PrintLab already exports STEP (`stage_build` -> `export_step`), which
+Gmsh's OCC kernel meshes directly. Split into `printlab/fea/{mesh,deck,
+solve}.py` so the parts needing no native tool (deck writing, `.frd`
+parsing) stay unit-testable without `gmsh`/`ccx` installed. `MaterialProfile`
+gained 7 transversely-isotropic elastic/strength fields (in-plane vs.
+through-layer, oriented per-analysis via CalculiX's `*ORIENTATION` card
+against the analysis's build direction) -- explicitly literature
+placeholders, not measured, exactly as uncalibrated as C.10's
+`provisional_score` above (see `docs/fea.md`). The load case (fixed region +
+one point load) is declarative config in `printlab.toml`'s `[fea]` table,
+not CAD source; the default fixed region reuses `printlab.mesh.overhangs`'s
+existing bed-contact concept rather than inventing a new one, since a
+printed part really is held by bed adhesion at its base.
+
+Acceptance check: `examples/hook`'s cantilevered arm, isolated with its own
+base fixed, landed within ~10% of a hand-calculated Euler-Bernoulli beam
+deflection -- strong agreement for a crude single-run linear-tet mesh on
+placeholder constants. One real limitation surfaced and documented (not
+fixed, since it needs a harder mesh-determinism investigation out of scope
+for v1): Gmsh's tetrahedralization is not perfectly reproducible run-to-run
+(observed directly: 855 vs. 908 nodes for the same input, seconds apart),
+so `fea_report.json` does not carry the same Tier-1 hash-identical
+reproducibility guarantee the rest of PrintLab's artifacts do -- see
+`docs/fea.md`'s "What this is not" section. One integration bug found and
+fixed along the way: `gmsh.initialize()` installs a SIGINT handler by
+default, which Python only permits from the main thread of the main
+interpreter -- this silently broke `printlab_fea` specifically when called
+through the MCP server (which dispatches synchronous tools off-thread) even
+though the CLI and test-suite invocations (both main-thread) never
+surfaced it; fixed via `gmsh.initialize(interruptible=False)`.
+
+**MCP server and Claude Code skills -- done, fulfilling this draft's own
+"Adapters may be built later" allowance under the LLM-Agnostic principle.**
+A new, separate `printlab_mcp` package (own `pyproject.toml`
+optional-dependency group, own console script) exposes `check`/`all`/
+`orient`/`render`/`fea`/`doctor` as FastMCP tools; `printlab/` itself gains
+zero new imports or dependencies from this -- `printlab_mcp` depends on
+`printlab`, never the reverse, preserving "the repository must not depend
+upon ... MCP" from this draft's Guiding Principles. Two Claude Code skills
+(`.claude/skills/printlab-iterate`, `printlab-render`) drive the CLI
+directly (not the MCP tools) with the same read-the-JSON, propose-a-CAD-edit
+discipline as `AGENTS.md`.
 
 **Containerization was investigated (not just left unscoped) and punted
 deliberately** -- see `docs/environment.md`'s "What's deliberately out of

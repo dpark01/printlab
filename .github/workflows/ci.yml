@@ -29,11 +29,19 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.11.27"
-      - run: uv sync
+      # Unlike the three slicers (GUI apps with no clean headless Linux
+      # packaging -- see docs/environment.md), CalculiX is a small, GUI-free
+      # CLI solver that's genuinely apt-installable here. Non-fatal: if
+      # Ubuntu's package lags Debian's, tests/integration/test_fea_hook.py
+      # and test_mcp_smoke.py's FEA case self-skip via shutil.which("ccx"),
+      # same as the slicer self-skip pattern below.
+      - run: sudo apt-get update && sudo apt-get install -y calculix-ccx || true
+      - run: uv sync --extra fea --extra mcp
       # No slicer is installed on this runner, so tests/integration's
       # slicer-dependent cases self-skip via backend.detect().available
       # (see printlab.slicing) -- this still exercises every deterministic
-      # code path, including the real CadQuery build.
+      # code path, including the real CadQuery build, and -- when ccx
+      # installed above -- the real FEA/MCP paths too.
       - run: uv run pytest tests/ -v
       - name: Smoke-test the real CAD build (exercises CadQuery/OCP, not just fixtures)
         run: uv run printlab build examples/bracket --backend prusaslicer

@@ -35,6 +35,12 @@ produce a real pass/warn/fail verdict; slicer-derived metrics (filament
 mass, print time) come back null. `uv run printlab orient examples/hook`
 tries the 6 axis-aligned rotations of a built part and recommends one by an
 explicit tie-break chain over the overhang/wall-thickness/bridge metrics.
+`uv run printlab render examples/hook --view iso --view front --view top`
+renders PNGs of the built part from named camera angles (or
+`--elevation`/`--azimuth` for a custom one) — no slicer needed either. With
+the `fea` extra and CalculiX installed, `uv run printlab fea examples/hook`
+runs a rough linear-static structural estimate (see
+[`docs/fea.md`](docs/fea.md)).
 
 See [`docs/environment.md`](docs/environment.md) for full environment setup
 (macOS/Linux setup scripts, the three-layer reproducibility model).
@@ -63,9 +69,11 @@ provenance record that makes two runs comparable and an agent loop auditable.
 | `mesh_report.json`           | `printlab.mesh`         | Geometry only: manifold, bbox, volume, area     |
 | `mesh_repair_report.json`    | `printlab.mesh`         | Explicit-only (`printlab repair`), not in `all` |
 | `orientation_search_report.json` | `printlab.mesh`     | Explicit-only (`printlab orient`), not in `all` |
+| `render_report.json` / `render_*.png` | `printlab.rendering` | Explicit-only (`printlab render`); PNGs not hashed (like `part.stl`) |
+| `fea_report.json`            | `printlab.fea`          | Explicit-only (`printlab fea`); needs `[fea]` in `printlab.toml` |
 | `slice_result.json`          | `printlab.slicing`      | Backend-specific; `resolved_settings` is hashed |
 | `gcode_report.json`          | `printlab.gcode`        | Authoritative — see caveat below                |
-| `printability_report.json`   | `printlab.evaluation`   | Raw metrics + pass/warn/fail checks, no score   |
+| `printability_report.json`   | `printlab.evaluation`   | Raw metrics + pass/warn/fail checks + an uncalibrated `provisional_score` |
 | `report.md` / `report.html`  | `printlab.reporting`    | Secondary, human-facing rendering (same data)   |
 | `run_manifest.json`          | `printlab.provenance`   | Tool versions + content hashes                  |
 
@@ -82,16 +90,28 @@ one exception is `estimated_time_s`, parsed from the slicer's own comment
 since independently simulating firmware motion timing is out of scope for
 v0.1 — treat it as advisory, unlike every other field.
 
+## MCP & agent integration
+
+An optional MCP adapter, `printlab_mcp`, exposes the pipeline (`check`, `all`,
+`orient`, `render`, `doctor`) as Model Context Protocol tools for Claude Code
+and other MCP clients. It's a one-way dependency — `printlab_mcp` depends on
+`printlab`, never the reverse, and the core takes on no `fastmcp` or
+agent-framework dependency. Install with `uv sync --extra mcp`; see
+[`docs/mcp.md`](docs/mcp.md) for registration, the tool list, and the two
+Claude Code skills (`printlab-iterate`, `printlab-render`).
+
 ## Design deviations from the original draft
 
 `SETUP.md` is the original v0.2 design doc. The as-built v0.1 differs from it
 in a few deliberate ways — most notably: reproducibility is defined in three
 tiers rather than claimed as byte-identical (slicers embed timestamps; see
-`printlab/determinism.py`), there is no composite printability score, and
-slicer metrics are always re-derived from G-code rather than trusted from a
-slicer's own report. These are explained in-line in the relevant module
-docstrings (`printlab/determinism.py`, `printlab/schemas/evaluation.py`,
-`printlab/gcode/parser.py`) rather than duplicated here.
+`printlab/determinism.py`), the composite printability score is explicitly
+uncalibrated rather than a trusted single number (see `provisional_score`/
+`score_calibrated` below), and slicer metrics are always re-derived from
+G-code rather than trusted from a slicer's own report. These are explained
+in-line in the relevant module docstrings (`printlab/determinism.py`,
+`printlab/schemas/evaluation.py`, `printlab/gcode/parser.py`) rather than
+duplicated here.
 
 ## Status
 
@@ -120,19 +140,40 @@ optimization loop this project originally specified (`repeat: edit CAD ->
 build -> evaluate -> compare -> until the metric stops improving`) as a
 standalone script outside the engineering pipeline, with a pluggable
 `propose_edit` callback (PrintLab itself never calls an LLM) and a
-deterministic demo proposer so the loop runs and tests with zero LLM.
+deterministic demo proposer so the loop runs and tests with zero LLM. A
+third example, `examples/canoe` (a hollow superellipse hull with engraved
+text), joined the golden/integration test suites — its engraved lettering
+persistently trips the `min_wall_thickness` check via ray-cast noise on
+sharp glyph corners, a known heuristic artifact rather than a real design
+flaw (see `printlab/mesh/wall_thickness.py`).
+
+`printlab render` (`printlab/rendering/`) offscreen-renders a built part to
+PNGs via matplotlib/Agg — already a transitive dependency, so no new
+install — from named presets or an arbitrary camera angle, alongside a
+`render_report.json` recording the (deterministic) camera metadata; the PNG
+bytes themselves are never hashed, the same treatment as `part.stl`.
+`printlab fea` (`printlab/fea/`) adds a first, deliberately crude structural
+capability: a linear-static analysis via CalculiX, meshing the part's STEP
+export with Gmsh, on transversely-isotropic (build-direction-aware)
+material properties — see [`docs/fea.md`](docs/fea.md) for the engine
+rationale, the load-case format, and why its material constants are exactly
+as uncalibrated as `provisional_score`.
 
 Unit tests need neither a CAD kernel nor a slicer; integration tests are
 capability-gated — most need a real slicer binary and self-skip without one,
 but the `check`/`orient`/optimize-loop tests need only a real CadQuery build
 and always run in the heavy lane, since they exercise no slicer at all.
 
-Deferred: a calibrated composite printability score — an uncalibrated
-hand-weighted scalar would be noise an agent learns to game rather than a
-real signal (see `printlab/schemas/evaluation.py`); it needs calibration
-data (more example parts spanning known failure modes, ideally real print
-outcomes) before picking weights, which is what `examples/thinwall` and
-`examples/bridge` are for. Also deferred: full containerization. The
+Partly landed: `printability_report.json` now exposes a `provisional_score`
+(0–100), but it is explicitly UNCALIBRATED — it carries `score_calibrated:
+false` in every v1 report and is a fixed, arbitrary per-check penalty for
+rough triage only, not something to optimize (see `provisional_score` /
+`score_calibrated` in `printlab/schemas/evaluation.py`). Still deferred: a
+*calibrated* composite score. An uncalibrated hand-weighted scalar would be
+noise an agent learns to game rather than a real signal; deriving trustworthy
+weights (so `score_calibrated` can flip to `true`) needs calibration data
+(more example parts spanning known failure modes, ideally real print
+outcomes), which is what `examples/thinwall` and `examples/bridge` are for. Also deferred: full containerization. The
 deterministic core (CadQuery/trimesh/PrintLab) is already multi-arch —
 `cadquery-ocp` and `vtk` both publish `linux/aarch64` wheels, so `uv sync`
 alone reproduces the environment on Apple Silicon or amd64 alike — but two

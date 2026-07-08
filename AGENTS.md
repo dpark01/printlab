@@ -26,10 +26,15 @@ read the pipeline's output and propose changes to CAD source in response.
   reports `status: "error"`, the part has a real problem; find the fix in
   CAD source rather than adjusting the evaluation thresholds to make the
   failure disappear.
-- **There is no composite score to optimize.** `printability_report.json`
-  intentionally has no single 0–100 number in v0.1 (see `SETUP.md`
-  deviations) — reason about the individual `checks[]` and `metrics{}`
-  instead of hill-climbing a scalar.
+- **Do not optimize the `provisional_score`.** `printability_report.json` now
+  carries a `provisional_score` (0–100), but it is UNCALIBRATED and ships with
+  `score_calibrated: false` (always, in v1) — a fixed, arbitrary per-check
+  penalty for rough human triage only, not a real signal. Branch on
+  `score_calibrated` if you need to know it's untrustworthy programmatically.
+  An agent that hill-climbs this scalar is chasing artifacts of the penalty
+  scheme, not real design improvements: reason about the individual `checks[]`
+  and `metrics{}` instead. `scripts/optimize_loop.py` optimizes a specific
+  named metric — never this score.
 - **No slicer installed? Use `printlab check <example_dir>` instead of
   `all`.** It runs build -> mesh -> evaluate -> report with slicing skipped
   entirely — the mesh-derived checks (manifold, build-volume fit, wall
@@ -54,6 +59,25 @@ read the pipeline's output and propose changes to CAD source in response.
   (no ERROR-level check remains and the target metric hasn't improved for
   `patience` iterations, or the proposer returns `None`, or `max_iters` is
   reached) and automatic CAD-source restore afterward.
+- **Use `printlab render <example_dir>` to actually look at a part** instead
+  of inventing ad hoc visualization code. It renders `part.stl` to PNGs from
+  named presets (`--view iso/front/back/left/right/top/bottom`) or an
+  arbitrary angle (`--elevation`/`--azimuth`), writing `render_report.json`
+  (the deterministic camera metadata — never the PNG bytes themselves, which
+  are matplotlib-version-dependent like `part.stl`) alongside `render_*.png`.
+  Works with `--backend check`, so no slicer is needed.
+- **`printlab fea <example_dir>` gives a rough structural estimate** —
+  fixed-at-the-bed, one point load, linear-static, via CalculiX — but only
+  for a part whose `printlab.toml` has an `[fea]` load case (today, only
+  `examples/hook`). Requires the `fea` extra (`uv sync --extra fea`) and
+  `ccx` installed (`printlab doctor` reports it). Treat `fea_report.json` as
+  order-of-magnitude: the material constants behind it are literature
+  placeholders, exactly as uncalibrated as `provisional_score` — see
+  `docs/fea.md`.
+- **PrintLab is also reachable via MCP and two Claude Code skills**
+  (`printlab_mcp/`, `.claude/skills/`) — see `docs/mcp.md`. They're a thin,
+  optional layer over this same CLI/pipeline, not a different source of
+  truth.
 
 ## The artifact contract
 
@@ -97,13 +121,17 @@ JSON Schemas for every artifact are committed under `docs/schemas/*.json`
 
 ## Non-goals (don't propose these as fixes)
 
-A calibrated composite printability score is deliberately out of scope: an
-uncalibrated hand-weighted scalar is noise an agent would learn to game
-rather than a real signal (see `printlab/schemas/evaluation.py`). It needs
-calibration data — more example parts spanning known failure modes
-(`examples/thinwall`, `examples/bridge` exist for exactly this), ideally
-real print outcomes — before picking weights. Don't invent a weighted score
-inside an evaluation check as a workaround; reason about the individual
+A *calibrated* composite printability score is deliberately out of scope. The
+report does expose a `provisional_score` (0–100) with `score_calibrated: false`
+— but that flag is `false` in every v1 report on purpose, and the score is a
+fixed, arbitrary per-check penalty (see `printlab/schemas/evaluation.py`), not
+a data-justified weighting. Treat it as triage-only and never as an
+optimization target: an uncalibrated scalar is noise an agent would learn to
+game rather than a real signal. Real calibration needs data — more example
+parts spanning known failure modes (`examples/thinwall`, `examples/bridge`
+exist for exactly this), ideally real print outcomes — before weights mean
+anything and `score_calibrated` can flip to `true`. Don't invent your own
+weighted score inside an evaluation check either; reason about the individual
 `checks[]`/`metrics{}` instead.
 
 Full containerization (a multi-arch Docker image bundling a slicer) is also
