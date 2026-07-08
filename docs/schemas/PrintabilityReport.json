@@ -139,10 +139,20 @@
       "title": "Metrics",
       "type": "object"
     },
+    "provisional_score": {
+      "default": 100,
+      "title": "Provisional Score",
+      "type": "integer"
+    },
     "schema_version": {
       "default": "0.1.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "score_calibrated": {
+      "default": false,
+      "title": "Score Calibrated",
+      "type": "boolean"
     },
     "status": {
       "$ref": "#/$defs/Status",

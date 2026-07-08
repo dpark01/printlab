@@ -33,6 +33,8 @@ def render(
             else "- Backend: **none (slicing skipped)**"
         ),
         f"- Overall status: **{_STATUS_LABEL[printability.status]}**",
+        f"- Provisional score: **{printability.provisional_score}/100** "
+        "(UNCALIBRATED -- triage only, do not optimize)",
         "",
         "## Geometry",
         "",

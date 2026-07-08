@@ -1,10 +1,12 @@
 """Printability evaluation: combine MeshReport + GCodeReport + printer
 constraints into independent pass/warning/fail checks.
 
-Deliberately no composite 0-100 score in v0.1 (see printlab.schemas.evaluation
-docstring): raw metrics plus independent checks are exposed instead, so an
-agent reasons about specific failure modes rather than an uncalibrated
-scalar.
+The independent `checks` (and raw `metrics`) are the real output an agent
+reasons about. A `provisional_score` is also computed here, but it is an
+explicitly UNCALIBRATED placeholder (see `printlab.schemas.evaluation`
+docstring and `_compute_provisional_score` below): a fixed, arbitrary
+per-check penalty for rough human triage only. It must not be optimized, and
+`score_calibrated` stays `False` until weights come from real print outcomes.
 """
 
 from __future__ import annotations
@@ -17,6 +19,29 @@ from printlab.schemas import (
     PrinterProfile,
     Status,
 )
+
+# Arbitrary, uncalibrated placeholder penalties: a flat per-check deduction,
+# deliberately NOT per-metric weights (those are exactly what would need real
+# calibration data to justify -- a flat penalty is more honest about being
+# provisional). See printlab.schemas.evaluation docstring: do not optimize the
+# resulting score; it is triage-only until score_calibrated flips to True.
+ERROR_PENALTY = 40  # arbitrary placeholder, uncalibrated
+WARNING_PENALTY = 10  # arbitrary placeholder, uncalibrated
+
+
+def _compute_provisional_score(checks: list[PrintabilityCheck]) -> int:
+    # Uniform across the slicer/no-slicer paths on purpose: `printlab check`
+    # (gcode=None) degrades layer_height_allowed to WARNING, so a healthy part
+    # scores 90 via `check` vs. 100 via `all`. We do NOT special-case that to
+    # make the score slicer-invariant -- simplicity is more honest for a number
+    # already labeled a placeholder.
+    score = 100
+    for c in checks:
+        if c.status is Status.ERROR:
+            score -= ERROR_PENALTY
+        elif c.status is Status.WARNING:
+            score -= WARNING_PENALTY
+    return max(0, score)
 
 
 def _check_manifold(mesh: MeshReport) -> PrintabilityCheck:
@@ -158,4 +183,10 @@ def evaluate(mesh: MeshReport, gcode: GCodeReport | None, printer: PrinterProfil
     elif any(check.status is Status.WARNING for check in checks):
         overall_status = Status.WARNING
 
-    return PrintabilityReport(metrics=metrics, checks=checks, status=overall_status)
+    return PrintabilityReport(
+        metrics=metrics,
+        checks=checks,
+        status=overall_status,
+        provisional_score=_compute_provisional_score(checks),
+        score_calibrated=False,
+    )

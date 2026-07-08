@@ -155,3 +155,63 @@ def test_no_gcode_non_manifold_mesh_is_still_an_error():
     mesh = _mesh(manifold=False, watertight=False)
     report = evaluate(mesh, None, _printer())
     assert report.status is Status.ERROR
+
+
+def test_healthy_part_scores_100_and_is_uncalibrated():
+    report = evaluate(_mesh(), _gcode(), _printer())
+    assert report.provisional_score == 100
+    assert report.score_calibrated is False
+
+
+def test_provisional_score_decreases_as_more_checks_fail():
+    healthy = evaluate(_mesh(), _gcode(), _printer())
+    non_manifold = evaluate(_mesh(manifold=False, watertight=False), _gcode(), _printer())
+    # non-manifold (ERROR) plus an oversized bbox (a second ERROR)
+    two_errors = evaluate(
+        _mesh(manifold=False, watertight=False, bbox=BBox(min=(0, 0, 0), max=(300, 10, 10))),
+        _gcode(),
+        _printer(),
+    )
+    assert healthy.provisional_score == 100
+    assert non_manifold.provisional_score == 60
+    assert two_errors.provisional_score == 20
+    assert healthy.provisional_score > non_manifold.provisional_score > two_errors.provisional_score
+
+
+def test_provisional_score_floored_at_zero_for_worst_case():
+    # both ERROR-capable checks fail plus all three WARNING-capable checks:
+    # 100 - 2*40 - 3*10 = -10, floored to 0.
+    mesh = _mesh(
+        manifold=False,
+        watertight=False,
+        bbox=BBox(min=(0, 0, 0), max=(300, 10, 10)),
+        self_intersecting=True,
+        self_intersection_count=1,
+        min_wall_thickness_mm=0.1,
+    )
+    gcode = _gcode(layer_height_mm=0.37)
+    report = evaluate(mesh, gcode, _printer())
+    assert report.provisional_score == 0
+
+
+def test_single_warning_costs_less_than_single_error():
+    one_warning = evaluate(_mesh(min_wall_thickness_mm=0.1), _gcode(), _printer())
+    one_error = evaluate(_mesh(manifold=False, watertight=False), _gcode(), _printer())
+    assert one_warning.provisional_score > one_error.provisional_score
+
+
+def test_no_gcode_check_path_scores_90():
+    """Pins the documented check-vs-all behavior: with gcode=None the
+    layer_height_allowed check degrades to WARNING, so an otherwise healthy
+    part scores 90 via `check` vs. 100 via `all`."""
+    report = evaluate(_mesh(), None, _printer())
+    assert report.provisional_score == 90
+
+
+def test_score_calibrated_is_always_false():
+    for report in (
+        evaluate(_mesh(), _gcode(), _printer()),
+        evaluate(_mesh(manifold=False, watertight=False), _gcode(), _printer()),
+        evaluate(_mesh(min_wall_thickness_mm=0.1), None, _printer()),
+    ):
+        assert report.score_calibrated is False

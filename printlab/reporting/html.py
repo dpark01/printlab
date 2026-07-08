@@ -84,7 +84,9 @@ not independently computed)</span></td></tr>"""
 <body>
 <h1>PrintLab Report: {_escape(part_name)}</h1>
 <p>Backend: {backend_line}
-&mdash; Overall status: <span class="{overall_class}">{overall_label}</span></p>
+&mdash; Overall status: <span class="{overall_class}">{overall_label}</span>
+&mdash; Provisional score: <b>{printability.provisional_score}/100</b>
+<span class="advisory">(UNCALIBRATED &mdash; triage only, do not optimize)</span></p>
 
 <h2>Geometry</h2>
 <table>
