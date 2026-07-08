@@ -28,10 +28,13 @@ uv sync --extra mcp
 
 ## Run for Claude Code (stdio)
 
-The server speaks stdio by default. Register it from the repo root:
+The server speaks stdio by default. `uv run` needs its working directory to be
+the repo root to find `pyproject.toml`, so pin it explicitly rather than
+relying on wherever Claude Code happens to be launched from. Register it from
+the repo root:
 
 ```bash
-claude mcp add printlab -- uv run printlab-mcp
+claude mcp add printlab -- uv --directory $(pwd) run printlab-mcp
 ```
 
 or commit a `.mcp.json` at the repo root so the whole team picks it up:
@@ -46,6 +49,14 @@ or commit a `.mcp.json` at the repo root so the whole team picks it up:
   }
 }
 ```
+
+Unlike the personal registration above, this can't pin an absolute path —
+`.mcp.json` is shared, and each teammate's checkout lives somewhere different.
+It works only as long as Claude Code is launched with the repo root as its
+working directory. `CLAUDE_PROJECT_DIR` doesn't rescue this: Claude Code sets
+it in the *spawned server's* environment, not its own, so `${CLAUDE_PROJECT_DIR}`
+in a project-scoped `.mcp.json`'s `command`/`args` needs a `:-.` fallback that
+just resolves back to cwd — no improvement over the bare `uv run` above.
 
 (`uv run` resolves the `printlab-mcp` console script defined in
 `pyproject.toml`. Run `claude mcp list` to confirm it registered.)
