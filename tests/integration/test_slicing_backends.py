@@ -14,7 +14,7 @@ from printlab import pipeline
 from printlab.slicing import available_backend_names, get_backend
 
 EXAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "examples"
-EXAMPLE_NAMES = ("bracket", "hook", "canoe")
+EXAMPLE_NAMES = ("bracket", "hook", "canoe", "benchy")
 
 pytestmark = pytest.mark.integration
 
