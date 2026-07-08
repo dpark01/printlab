@@ -48,5 +48,23 @@ echo "OrcaSlicer AppImage: $ORCA_APPIMAGE"
 echo "Add it to PATH as 'OrcaSlicer', e.g.:"
 echo "  ln -sf \"$ORCA_APPIMAGE\" ~/.local/bin/OrcaSlicer"
 
+echo "==> Installing CalculiX (ccx) FEA solver"
+# calculix-ccx is packaged in Debian (bookworm/sid). Falls back to guidance
+# elsewhere; conda-forge ships it for other distros.
+if command -v apt-get >/dev/null 2>&1; then
+    sudo apt-get install -y calculix-ccx || {
+        echo "apt-get could not install calculix-ccx -- install via conda-forge:"
+        echo "  conda install -c conda-forge calculix"
+        echo "or build ccx from source: http://www.calculix.de/"
+    }
+else
+    echo "apt-get not found -- install CalculiX another way:"
+    echo "  conda install -c conda-forge calculix"
+    echo "or build ccx from source: http://www.calculix.de/"
+fi
+
+echo "==> Installing FEA Python dependency (gmsh, 'fea' extra)"
+uv sync --extra fea
+
 echo "==> Verifying installed versions against tools.toml"
 uv run printlab doctor

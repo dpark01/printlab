@@ -57,6 +57,34 @@ class MaterialProfile(BaseModel):
     nozzle_temp_c: tuple[float, float]  # (min, max)
     bed_temp_c: tuple[float, float]
 
+    # Transversely-isotropic linear-elastic constants for FEA (printlab.fea).
+    # FDM/FFF parts are stiffer/stronger in-plane within a layer ("xy") than
+    # through the layer stack ("z", the build direction), because interlayer
+    # bonds are weaker than continuous extruded roads -- transverse isotropy
+    # (in-plane isotropic, distinct through-thickness) is the standard first
+    # approximation. "xy"/"z" are RELATIVE to whatever build direction an
+    # analysis uses, not fixed world axes (printlab.fea orients the material
+    # frame per-analysis via CalculiX's *ORIENTATION card).
+    #
+    # These are PLACEHOLDER literature values, not measured/calibrated for any
+    # specific printer+filament+process -- exactly as provisional as anything
+    # else this codebase flags uncalibrated (cf. PrintabilityReport's
+    # provisional_score). Treat FEA output as order-of-magnitude, not
+    # certification-grade, until a real coupon-test calibration replaces these.
+    #
+    # In-plane shear modulus G_xy is NOT stored: under transverse isotropy the
+    # in-plane behavior is isotropic, so G_xy = E_xy / (2 * (1 + nu_xy))
+    # exactly (printlab.fea.deck derives it). Only the out-of-plane
+    # shear_modulus_xz_mpa needs its own field, since interlayer shear is a
+    # known weak point that is not derivable from the in-plane constants.
+    young_modulus_xy_mpa: float
+    young_modulus_z_mpa: float
+    poisson_ratio_xy: float
+    poisson_ratio_xz: float
+    shear_modulus_xz_mpa: float
+    tensile_strength_xy_mpa: float
+    tensile_strength_z_mpa: float
+
     native_bundle: dict[str, Path] = Field(default_factory=dict)
 
 

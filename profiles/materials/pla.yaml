@@ -6,6 +6,21 @@ material: "PLA"
 density_g_cm3: 1.24
 nozzle_temp_c: [190.0, 220.0]
 bed_temp_c: [45.0, 60.0]
+
+# Transversely-isotropic elastic constants for FEA (printlab.fea). These are
+# PLACEHOLDER literature values for generic printed PLA, NOT measured for a
+# specific printer/filament/process -- as provisional as any other
+# uncalibrated number here. Replace with coupon-test data before trusting FEA
+# stresses quantitatively. Sources noted per value; "in-plane" = within a
+# layer, "z" = build direction (interlayer).
+young_modulus_xy_mpa: 3200.0   # printed PLA in-plane tensile modulus ~3.0-3.5 GPa (bulk cast PLA ~3.5 GPa; solid-infill FDM coupons land a little lower)
+young_modulus_z_mpa: 2100.0    # ~66% of in-plane: documented interlayer (Z) modulus knock-down for FDM PLA (~55-75% of in-plane in the literature)
+poisson_ratio_xy: 0.36         # in-plane Poisson ratio for PLA ~0.33-0.39
+poisson_ratio_xz: 0.33         # through-thickness Poisson ratio, same order, slightly lower
+shear_modulus_xz_mpa: 850.0    # interlayer shear: conservatively below the derived in-plane G_xy = 3200/(2*1.36) ~= 1176 MPa, since layer-bond shear is a known weak point
+tensile_strength_xy_mpa: 55.0  # printed PLA in-plane UTS ~50-65 MPa
+tensile_strength_z_mpa: 30.0   # ~55% of in-plane: interlayer tensile strength is markedly weaker (~40-70% of in-plane)
+
 native_bundle:
   bambu: profiles/native/bambu/filament_generic_pla.json
   prusaslicer: profiles/native/prusaslicer/filament_generic_pla.ini

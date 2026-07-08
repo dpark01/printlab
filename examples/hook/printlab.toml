@@ -10,3 +10,14 @@ function = "build"
 printer = "profiles/printers/bambu_a1.yaml"
 material = "profiles/materials/pla.yaml"
 process = "profiles/processes/draft.yaml"
+
+# FEA load case (printlab.fea). Maps 1:1 to printlab.schemas.fea.FEALoadCase.
+# load_point_mm is the arm's free-end center: (0, PLATE_THICKNESS + ARM_LENGTH,
+# ARM_Z) = (0, 34, 28) in examples/hook/part.py. A 10 N downward (-Z) pull, as
+# if something were hung on the hook. fixed_region is omitted here so it takes
+# the "bed_contact" default (nodes resting on the bed are fully constrained);
+# an explicit box override would be fixed_region = [[xmin,ymin,zmin], [xmax,ymax,zmax]].
+[fea]
+load_point_mm = [0.0, 34.0, 28.0]
+load_force_n = [0.0, 0.0, -10.0]
+load_region_radius_mm = 4.0

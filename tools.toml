@@ -21,3 +21,8 @@ role = "Primary backend for Bambu Lab printers."
 version = "2.4.2"
 homepage = "https://github.com/OrcaSlicer/OrcaSlicer"
 role = "Alternative Bambu-compatible backend with a broader vendor profile library."
+
+[tools.calculix]
+version = "2.23"
+homepage = "https://www.calculix.de/"
+role = "FEA solver (ccx) for linear-static deflection/stress analysis (printlab fea)."

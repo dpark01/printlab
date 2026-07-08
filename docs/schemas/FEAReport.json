@@ -1,0 +1,250 @@
+{
+  "$defs": {
+    "ArtifactError": {
+      "additionalProperties": false,
+      "description": "A single structured failure, so an agent can branch without parsing prose.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "context": {
+          "additionalProperties": true,
+          "title": "Context",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "stage"
+      ],
+      "title": "ArtifactError",
+      "type": "object"
+    },
+    "FEALoadCase": {
+      "additionalProperties": false,
+      "description": "One static load case: where the part is held, and one applied force.\n\n`fixed_region` defaults to \"bed_contact\" -- the nodes resting on the print\nbed are fully constrained, matching how a printed part is physically held\nby bed adhesion at its base. The alternative (an explicit min/max box in mm)\nis an override path for a future non-bed-fixed case; v1's real usage is\nalways the default.\n\nThe load is a single force vector (`load_force_n`, in newtons) applied at\n`load_point_mm`. To avoid a stress singularity at one node, printlab.fea\ndistributes it evenly over every mesh node within `load_region_radius_mm`\nof that point (falling back to the single nearest node if none are in\nrange).",
+      "properties": {
+        "fixed_region": {
+          "anyOf": [
+            {
+              "const": "bed_contact",
+              "type": "string"
+            },
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                {
+                  "maxItems": 3,
+                  "minItems": 3,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                }
+              ],
+              "type": "array"
+            }
+          ],
+          "default": "bed_contact",
+          "title": "Fixed Region"
+        },
+        "load_force_n": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Load Force N",
+          "type": "array"
+        },
+        "load_point_mm": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Load Point Mm",
+          "type": "array"
+        },
+        "load_region_radius_mm": {
+          "default": 2.0,
+          "title": "Load Region Radius Mm",
+          "type": "number"
+        }
+      },
+      "required": [
+        "load_point_mm",
+        "load_force_n"
+      ],
+      "title": "FEALoadCase",
+      "type": "object"
+    },
+    "Status": {
+      "description": "Outcome of a stage, or of a single evaluation check.",
+      "enum": [
+        "ok",
+        "warning",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "printlab.fea.analyze() -> fea_report.json.\n\n`safety_factor` is min(tensile_strength_xy, tensile_strength_z) /\nmax_von_mises_stress -- a deliberately conservative, isotropic-strength\nstand-in, NOT a real anisotropic failure criterion. `None` when it cannot\nbe computed (e.g. zero peak stress). `build_direction` records which axis\nwas treated as the weak/interlayer direction for material orientation.",
+  "properties": {
+    "build_direction": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "title": "Build Direction",
+      "type": "array"
+    },
+    "errors": {
+      "items": {
+        "$ref": "#/$defs/ArtifactError"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "input_path": {
+      "format": "path",
+      "title": "Input Path",
+      "type": "string"
+    },
+    "input_sha256": {
+      "title": "Input Sha256",
+      "type": "string"
+    },
+    "load_case": {
+      "$ref": "#/$defs/FEALoadCase"
+    },
+    "max_displacement_mm": {
+      "title": "Max Displacement Mm",
+      "type": "number"
+    },
+    "max_von_mises_stress_mpa": {
+      "title": "Max Von Mises Stress Mpa",
+      "type": "number"
+    },
+    "mesh_element_count": {
+      "title": "Mesh Element Count",
+      "type": "integer"
+    },
+    "mesh_node_count": {
+      "title": "Mesh Node Count",
+      "type": "integer"
+    },
+    "safety_factor": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Safety Factor"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "solver": {
+      "default": "calculix",
+      "title": "Solver",
+      "type": "string"
+    },
+    "solver_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Solver Version"
+    },
+    "status": {
+      "$ref": "#/$defs/Status",
+      "default": "ok"
+    }
+  },
+  "required": [
+    "input_path",
+    "input_sha256",
+    "load_case",
+    "build_direction",
+    "mesh_node_count",
+    "mesh_element_count",
+    "max_displacement_mm",
+    "max_von_mises_stress_mpa"
+  ],
+  "title": "FEAReport",
+  "type": "object"
+}

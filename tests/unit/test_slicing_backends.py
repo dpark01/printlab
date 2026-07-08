@@ -49,6 +49,13 @@ def _profiles(tmp_path: Path, backend_name: str):
         density_g_cm3=1.24,
         nozzle_temp_c=(190.0, 220.0),
         bed_temp_c=(45.0, 60.0),
+        young_modulus_xy_mpa=3200.0,
+        young_modulus_z_mpa=2100.0,
+        poisson_ratio_xy=0.36,
+        poisson_ratio_xz=0.33,
+        shear_modulus_xz_mpa=850.0,
+        tensile_strength_xy_mpa=55.0,
+        tensile_strength_z_mpa=30.0,
         native_bundle={backend_name: filament},
     )
     process_profile = ProcessProfile(

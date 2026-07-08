@@ -1,4 +1,4 @@
-"""PrintLab CLI: printlab build|mesh|repair|orient|render|slice|gcode|
+"""PrintLab CLI: printlab build|mesh|repair|orient|render|fea|slice|gcode|
 evaluate|report|check|all|doctor <example_dir>
 
 Every subcommand operates against `<example_dir>/output/<backend>/`, the one
@@ -17,6 +17,7 @@ from pathlib import Path
 import typer
 
 from printlab import pipeline
+from printlab.fea.solve import detect_ccx_version, find_ccx_binary
 from printlab.rendering import DEFAULT_VIEWS, CameraView
 from printlab.schemas import GCodeReport, MeshReport, PrintabilityReport, RunManifest, SliceResult
 from printlab.slicing import available_backend_names, detect_all
@@ -125,6 +126,35 @@ def render(
         views = list(view)
     report = pipeline.stage_render(stl_path, output_dir, views=views, width_px=width, height_px=height)
     typer.echo(report.model_dump_json(indent=2))
+
+
+@app.command()
+def fea(example_dir: Path, backend: str = _BackendOption, output: Path | None = _OutputOption) -> None:
+    """Run a linear-static FEA (CalculiX) using printlab.toml's [fea] load
+    case -> fea_report.json.
+
+    Requires the `fea` extra (gmsh) and `ccx` on PATH -- see `printlab
+    doctor`. Not part of `printlab all`; a crude single-run analysis on
+    placeholder material constants (see printlab.schemas.profiles), not a
+    certification-grade result.
+    """
+    config = pipeline.load_part_config(example_dir)
+    if config.fea_load_case is None:
+        typer.echo(f"error: {example_dir} has no [fea] load case in printlab.toml", err=True)
+        raise typer.Exit(code=1)
+    output_dir = _resolve_output_dir(config, backend, output)
+    step_path = output_dir / pipeline.ARTIFACT_FILENAMES["step"]
+    _, material, _ = pipeline.load_profiles(config)
+    try:
+        report = pipeline.stage_fea(
+            step_path, output_dir, load_case=config.fea_load_case, material=material
+        )
+    except pipeline.PipelineError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    typer.echo(report.model_dump_json(indent=2))
+    if report.status.value == "error":
+        raise typer.Exit(code=1)
 
 
 @app.command(name="slice")
@@ -276,6 +306,20 @@ def doctor() -> None:
             typer.echo(f"[OK]      {name}: {cap.version or 'unknown'}")
         if cap.notes:
             typer.echo(f"          {cap.notes}")
+
+    # Not a slicing backend (no interchangeable alternatives), so it doesn't
+    # go through the SlicerBackend/Capabilities abstraction -- same
+    # [OK]/[WARN]/[MISSING] shape as the slicers above, checked directly.
+    ccx_binary = find_ccx_binary()
+    ccx_pinned_version = pinned.get("calculix", {}).get("version")
+    if ccx_binary is None:
+        typer.echo(f"[MISSING] calculix: not installed (pinned version: {ccx_pinned_version or 'n/a'})")
+    else:
+        ccx_version = detect_ccx_version(ccx_binary)
+        if ccx_pinned_version and ccx_version != ccx_pinned_version:
+            typer.echo(f"[WARN]    calculix: installed={ccx_version}, pinned={ccx_pinned_version}")
+        else:
+            typer.echo(f"[OK]      calculix: {ccx_version or 'unknown'}")
 
 
 if __name__ == "__main__":

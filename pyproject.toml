@@ -21,6 +21,11 @@ dependencies = [
 [project.scripts]
 printlab = "printlab.cli.main:app"
 
+[project.optional-dependencies]
+fea = [
+    "gmsh>=4.12,<5",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3,<9",

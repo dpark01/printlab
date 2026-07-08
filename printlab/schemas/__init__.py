@@ -16,6 +16,7 @@ from printlab.schemas.common import (
     Status,
 )
 from printlab.schemas.evaluation import PrintabilityCheck, PrintabilityReport
+from printlab.schemas.fea import FEALoadCase, FEAReport
 from printlab.schemas.gcode import GCodeReport
 from printlab.schemas.mesh import MeshRepairReport, MeshReport
 from printlab.schemas.orientation import OrientationCandidate, OrientationSearchReport
@@ -29,6 +30,8 @@ __all__ = [
     "ArtifactError",
     "BBox",
     "Capabilities",
+    "FEALoadCase",
+    "FEAReport",
     "GCodeReport",
     "MaterialProfile",
     "MeshRepairReport",
@@ -55,6 +58,7 @@ ARTIFACT_MODELS = [
     MeshRepairReport,
     OrientationSearchReport,
     RenderReport,
+    FEAReport,
     SliceRequest,
     SliceResult,
     GCodeReport,

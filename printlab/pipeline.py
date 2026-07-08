@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from printlab.cad import build_part, export_step, export_stl
 from printlab.determinism import hash_artifact
 from printlab.evaluation import evaluate as evaluate_printability
+from printlab.fea import analyze as analyze_fea
 from printlab.gcode import analyze as analyze_gcode
 from printlab.mesh import analyze as analyze_mesh
 from printlab.mesh import orient as search_orientation
@@ -33,6 +34,8 @@ from printlab.rendering import DEFAULT_VIEWS, CameraView
 from printlab.rendering import render as render_part
 from printlab.reporting import render_html, render_markdown
 from printlab.schemas import (
+    FEALoadCase,
+    FEAReport,
     GCodeReport,
     MaterialProfile,
     MeshRepairReport,
@@ -56,6 +59,7 @@ ARTIFACT_FILENAMES = {
     "stl_repaired": "part_repaired.stl",
     "orientation_search_report": "orientation_search_report.json",
     "render_report": "render_report.json",
+    "fea_report": "fea_report.json",
     "slice_result": "slice_result.json",
     "gcode_report": "gcode_report.json",
     "printability_report": "printability_report.json",
@@ -78,6 +82,7 @@ class PartConfig:
     printer_profile_path: Path
     material_profile_path: Path
     process_profile_path: Path
+    fea_load_case: FEALoadCase | None = None
 
 
 def load_part_config(example_dir: Path, *, repo_root: Path | None = None) -> PartConfig:
@@ -92,11 +97,13 @@ def load_part_config(example_dir: Path, *, repo_root: Path | None = None) -> Par
         data = tomllib.load(fh)
     part = data["part"]
     profiles = data["profiles"]
+    fea_table = data.get("fea")
     return PartConfig(
         name=part["name"],
         example_dir=example_dir,
         part_py=example_dir / part["module"],
         build_function=part.get("function", "build"),
+        fea_load_case=FEALoadCase(**fea_table) if fea_table else None,
         printer_profile_path=repo_root / profiles["printer"],
         material_profile_path=repo_root / profiles["material"],
         process_profile_path=repo_root / profiles["process"],
@@ -187,6 +194,27 @@ def stage_render(
     """
     report = render_part(stl_path, output_dir, views=views, width_px=width_px, height_px=height_px)
     _write_json_atomic(output_dir / ARTIFACT_FILENAMES["render_report"], report)
+    return report
+
+
+def stage_fea(
+    step_path: Path,
+    output_dir: Path,
+    *,
+    load_case: FEALoadCase,
+    material: MaterialProfile,
+    build_direction: tuple[float, float, float] = (0.0, 0.0, 1.0),
+) -> FEAReport:
+    """Not part of `run_all()`'s critical path (like stage_repair/
+    stage_orientation_search/stage_render): explicit linear-static FEA via
+    CalculiX. Requires the `fea` extra (gmsh) and `ccx` on PATH -- see
+    printlab.fea for the crude-but-real, placeholder-material caveats.
+    """
+    try:
+        report = analyze_fea(step_path, load_case, material, build_direction=build_direction)
+    except (FileNotFoundError, RuntimeError, ModuleNotFoundError) as exc:
+        raise PipelineError(f"FEA failed: {exc}") from exc
+    _write_json_atomic(output_dir / ARTIFACT_FILENAMES["fea_report"], report)
     return report
 
 
