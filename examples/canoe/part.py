@@ -51,6 +51,9 @@ MIN_TIP = 0.35  # floor on station half-width/depth so end stations stay valid, 
 SHAPE_N = 3.0  # superellipse exponent for the cross-section: 2 = true ellipse, higher = more vertical sides
 
 WALL = 1.2  # uniform hull wall thickness, enforced by shell() rather than hand-tapered
+FLOOR_THICKNESS = 1.2  # solid floor built up above the flat keel in the hollow mid-section,
+# so floor thickness is set explicitly (not left as WALL - FLAT_KEEL_SHAVE ~ 0.2mm, which
+# printlab_check flags as below the 0.4mm minimum feature size).
 
 CAV_T0 = 0.16  # the mid (hollow) section spans this middle portion of the length;
 CAV_T1 = 0.84  # outside it, the hull is a solid bow/stern cap
@@ -74,10 +77,17 @@ THWART_INSET = 0.4  # embed the thwart ends inside the outer surface for a clean
 
 SIDE_TEXT_PORT = "2026"
 SIDE_TEXT_STARBOARD = "MHA"
-SIDE_TEXT_SIZE = 3.0
-SIDE_TEXT_DEPTH = 0.4  # shallow: the mid-section wall here is only WALL thick
+SIDE_TEXT_SIZE = 3.3  # bumped up slightly from 3.0 for readability; see SIDE_TEXT_PITCH
+SIDE_TEXT_DEPTH = 0.5  # bumped up slightly from 0.4 for readability -- still shallow:
+# the mid-section wall here is only WALL thick, and printlab_check's min_wall_thickness
+# margin under this text was already tight (0.41mm at depth 0.4), so re-check after
+# any further increase.
 SIDE_TEXT_X = 22.0  # near the bow, well into the thin-walled mid section
 SIDE_TEXT_Z = -2.0  # below the gunwale (z=0), above the waterline-ish depth
+SIDE_TEXT_PITCH = 2.3  # per-glyph advance along the hull length, bumped slightly with
+# SIDE_TEXT_SIZE to keep the same relative spacing. Each glyph sits on its own tangent
+# plane so the word follows the bow taper; fixed pitch = evenly spaced glyphs (tune by
+# eye via printlab_render).
 SIDE_TEXT_OVERSHOOT = 0.15  # start the cut this far *outside* the analytic surface point, so
 # it always crosses the small gap between the analytic curve and the actual faceted loft surface
 # (skipping this left a sliver of un-cut skin over the recess -- a disconnected shell, not a warning)
@@ -152,7 +162,16 @@ def _build_hull() -> cq.Shape:
     mid = _half_hull_piece(CAV_T0, CAV_T1, STATIONS_MID)
     stern_cap = _half_hull_piece(CAV_T1, 1.0, STATIONS_STERN)
     mid_shell = cq.Workplane(obj=mid).faces(">Z").shell(-WALL, kind="intersection").val()
-    return bow_cap.fuse(mid_shell).fuse(stern_cap)
+    hull = bow_cap.fuse(mid_shell).fuse(stern_cap)
+    # shell() alone leaves only WALL - FLAT_KEEL_SHAVE (~0.2mm) of floor under the flat
+    # keel patch -- fill the hollow bottom up to a fixed height instead, so floor
+    # thickness is an explicit constant, decoupled from hull curvature and the shave.
+    z_floor_top = -OUTER_DEPTH + FLAT_KEEL_SHAVE + FLOOR_THICKNESS
+    slab = cq.Solid.makeBox(
+        LENGTH + 10, 40, z_floor_top + OUTER_DEPTH + 5, pnt=Vector(-5, -20, -OUTER_DEPTH - 5)
+    )
+    floor = mid.intersect(slab)  # clip the slab to the hull's own outer cross-section
+    return hull.fuse(floor)
 
 
 def _add_flat_keel(hull: cq.Shape) -> cq.Shape:
@@ -192,13 +211,16 @@ def _bow_text_cutter() -> cq.Shape:
     )
 
 
-def _side_text_cutter(text: str, x: float, z: float, side: str) -> cq.Shape:
-    """Text cut into the outer hull surface at length x, height z, on the given side
-    ("port" or "starboard"). The cut is a single flat-plane extrusion tangent to the
-    surface at that point — not a true surface projection — so it only stays shallow
-    and even because the superellipse profile is nearly flat through this z range;
-    see the "how hard would surface-conforming lettering be" discussion this shape
-    was chosen to make moot.
+def _glyph_cutter(char: str, x: float, z: float, side: str) -> cq.Shape:
+    """A single glyph cut into the outer hull surface at length x, height z, on the
+    given side ("port" or "starboard"). The cut is a flat-plane extrusion tangent to
+    the surface at that point — not a true surface projection — so it only stays
+    shallow and even because the superellipse profile is nearly flat through this z
+    range; see the "how hard would surface-conforming lettering be" discussion this
+    shape was chosen to make moot. `_side_text_cutter` calls this once per glyph, each
+    at its own x, so a multi-character word gets its own tangent plane per letter
+    instead of one plane for the whole word (which left end letters over- or
+    under-cut wherever the hull's fore-aft taper diverged from that single plane).
     """
     t = x / LENGTH
     _, half_depth = _outer_profile(t)
@@ -213,7 +235,7 @@ def _side_text_cutter(text: str, x: float, z: float, side: str) -> cq.Shape:
     reading_dir = (1, 0, 0) if side == "port" else (-1, 0, 0)
     plane = cq.Plane(origin=origin, normal=(0, normal_y, normal_z), xDir=reading_dir)
     return cq.Compound.makeText(
-        text,
+        char,
         SIDE_TEXT_SIZE,
         -(SIDE_TEXT_DEPTH + SIDE_TEXT_OVERSHOOT),
         font="Arial",
@@ -222,6 +244,19 @@ def _side_text_cutter(text: str, x: float, z: float, side: str) -> cq.Shape:
         valign="center",
         position=plane,
     )
+
+
+def _side_text_cutter(text: str, x: float, z: float, side: str) -> cq.Shape:
+    """Lay `text` into the hull side as one glyph cutter per character (see
+    `_glyph_cutter`), spaced at a fixed `SIDE_TEXT_PITCH` around length position x, so
+    the word follows the hull's fore-aft taper instead of sitting on one flat plane."""
+    sign = 1.0 if side == "port" else -1.0  # preserves the current reading order per side
+    n = len(text)
+    cutters = [
+        _glyph_cutter(ch, x + sign * (i - (n - 1) / 2) * SIDE_TEXT_PITCH, z, side)
+        for i, ch in enumerate(text)
+    ]
+    return cq.Compound.makeCompound(cutters)
 
 
 def build() -> cq.Workplane:
