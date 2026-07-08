@@ -34,7 +34,7 @@ relying on wherever Claude Code happens to be launched from. Register it from
 the repo root:
 
 ```bash
-claude mcp add printlab -- uv --directory $(pwd) run printlab-mcp
+claude mcp add printlab --scope user -- uv --directory $(pwd) run printlab-mcp
 ```
 
 or commit a `.mcp.json` at the repo root so the whole team picks it up:
