@@ -50,10 +50,38 @@
       "title": "Nozzle Temp C",
       "type": "array"
     },
+    "poisson_ratio_xy": {
+      "title": "Poisson Ratio Xy",
+      "type": "number"
+    },
+    "poisson_ratio_xz": {
+      "title": "Poisson Ratio Xz",
+      "type": "number"
+    },
     "schema_version": {
       "default": "0.1.0",
       "title": "Schema Version",
       "type": "string"
+    },
+    "shear_modulus_xz_mpa": {
+      "title": "Shear Modulus Xz Mpa",
+      "type": "number"
+    },
+    "tensile_strength_xy_mpa": {
+      "title": "Tensile Strength Xy Mpa",
+      "type": "number"
+    },
+    "tensile_strength_z_mpa": {
+      "title": "Tensile Strength Z Mpa",
+      "type": "number"
+    },
+    "young_modulus_xy_mpa": {
+      "title": "Young Modulus Xy Mpa",
+      "type": "number"
+    },
+    "young_modulus_z_mpa": {
+      "title": "Young Modulus Z Mpa",
+      "type": "number"
     }
   },
   "required": [
@@ -61,7 +89,14 @@
     "material",
     "density_g_cm3",
     "nozzle_temp_c",
-    "bed_temp_c"
+    "bed_temp_c",
+    "young_modulus_xy_mpa",
+    "young_modulus_z_mpa",
+    "poisson_ratio_xy",
+    "poisson_ratio_xz",
+    "shear_modulus_xz_mpa",
+    "tensile_strength_xy_mpa",
+    "tensile_strength_z_mpa"
   ],
   "title": "MaterialProfile",
   "type": "object"
