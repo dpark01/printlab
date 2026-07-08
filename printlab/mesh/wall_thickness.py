@@ -50,6 +50,20 @@ DEFAULT_CONE_SIDE_RAYS = 6
 #: not the strict minimum -- see module docstring for why.
 DEFAULT_PERCENTILE = 5.0
 
+#: Rays are cast in batches of at most this many rather than all at once.
+#: trimesh's non-embree (pure rtree) RayMeshIntersector's per-ray memory cost
+#: on intersects_location() is roughly constant (measured directly on
+#: examples/canoe's 14.4k-face hull: ~0.3-0.4MB/ray, scaling ~linearly from
+#: 200 to 5,000 rays) but that constant is large enough on thin/curved
+#: geometry with many AABB-overlapping candidate triangles per ray that all
+#: ~101k rays at once peaked at ~16-19GB RSS -- enough to OOM-kill a
+#: standard CI runner silently (a killed process produces no traceback, just
+#: an abrupt exit). 2,000 rays/batch brings canoe's full `run_check` down to
+#: ~3.3GB peak RSS (comfortably under a 7GB CI runner) with an identical
+#: result to one giant batch: same rays, same hits, just accumulated
+#: incrementally.
+_MAX_RAYS_PER_BATCH = 2_000
+
 
 def _cone_directions(normals: np.ndarray, half_angle_deg: float, side_rays: int) -> np.ndarray:
     """Return ray directions with shape (side_rays + 1, len(normals), 3):
@@ -110,18 +124,20 @@ def estimate_min_wall_thickness_mm(
     # Matches the (num_directions, num_faces, 3) -> (-1, 3) row-major flattening.
     face_index_for_ray = np.tile(np.arange(num_faces), num_directions)
 
-    locations, index_ray, _index_tri = mesh.ray.intersects_location(
-        ray_origins=flat_origins, ray_directions=flat_directions, multiple_hits=False
-    )
-    if len(locations) == 0:
-        return None
-
-    hit_face_indices = face_index_for_ray[index_ray]
-    hit_distances = np.linalg.norm(locations - flat_origins[index_ray], axis=1)
-
     per_face_hits: dict[int, list[float]] = {}
-    for face_idx, distance in zip(hit_face_indices, hit_distances, strict=True):
-        per_face_hits.setdefault(int(face_idx), []).append(float(distance))
+    total_rays = flat_origins.shape[0]
+    for start in range(0, total_rays, _MAX_RAYS_PER_BATCH):
+        end = min(start + _MAX_RAYS_PER_BATCH, total_rays)
+        batch_origins = flat_origins[start:end]
+        locations, index_ray, _index_tri = mesh.ray.intersects_location(
+            ray_origins=batch_origins, ray_directions=flat_directions[start:end], multiple_hits=False
+        )
+        if len(locations) == 0:
+            continue
+        hit_face_indices = face_index_for_ray[start:end][index_ray]
+        hit_distances = np.linalg.norm(locations - batch_origins[index_ray], axis=1)
+        for face_idx, distance in zip(hit_face_indices, hit_distances, strict=True):
+            per_face_hits.setdefault(int(face_idx), []).append(float(distance))
 
     per_face_medians = [float(np.median(hits)) for hits in per_face_hits.values()]
     if not per_face_medians:
