@@ -1,10 +1,12 @@
-"""PrintLab CLI: printlab build|mesh|slice|gcode|evaluate|report|all|doctor <example_dir>
+"""PrintLab CLI: printlab build|mesh|slice|gcode|evaluate|report|check|all|doctor <example_dir>
 
 Every subcommand operates against `<example_dir>/output/<backend>/`, the one
 self-contained deterministic output-directory bundle for a (part, backend)
-pair (see printlab.pipeline). Subcommands other than `all` read their
+pair (see printlab.pipeline). Subcommands other than `all`/`check` read their
 upstream artifacts back from that directory rather than recomputing them, so
 each stage stays independently executable per SETUP.md's design principle.
+`check` uses the pseudo-backend name "check" (`output/check/`) since it never
+invokes a slicer -- see `printlab.pipeline.run_check`.
 """
 
 from __future__ import annotations
@@ -141,6 +143,29 @@ def report(example_dir: Path, backend: str = _BackendOption, output: Path | None
     )
     typer.echo(f"wrote {report_path}")
     typer.echo(f"wrote {output_dir / pipeline.ARTIFACT_FILENAMES['report_html']}")
+
+
+@app.command()
+def check(example_dir: Path, output: Path | None = _OutputOption) -> None:
+    """Run build -> mesh -> evaluate -> report with slicing skipped entirely.
+
+    No slicer required: mesh-derived printability checks (manifold,
+    build-volume fit, wall thickness) still run; slicer-derived metrics
+    (filament mass, print time, layer count) come back null. Writes to
+    `output/check/` by default, not a backend-named directory. See
+    `printlab all` for the full-fidelity pipeline once a slicer is installed.
+    """
+    try:
+        result = pipeline.run_check(example_dir, output_dir=output)
+    except pipeline.PipelineError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"output directory: {result['output_dir']}")
+    typer.echo(f"printability status: {result['printability'].status.value}")
+    typer.echo(f"report: {result['report_path']}")
+    if result["printability"].status.value == "error":
+        raise typer.Exit(code=1)
 
 
 @app.command(name="all")

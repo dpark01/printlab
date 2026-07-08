@@ -190,7 +190,7 @@ def stage_gcode(slice_result: SliceResult, output_dir: Path, *, material: Materi
 
 
 def stage_evaluate(
-    mesh: MeshReport, gcode: GCodeReport, output_dir: Path, *, printer: PrinterProfile
+    mesh: MeshReport, gcode: GCodeReport | None, output_dir: Path, *, printer: PrinterProfile
 ) -> PrintabilityReport:
     report = evaluate_printability(mesh, gcode, printer)
     _write_json_atomic(output_dir / ARTIFACT_FILENAMES["printability_report"], report)
@@ -200,8 +200,8 @@ def stage_evaluate(
 def stage_report(
     config: PartConfig,
     mesh: MeshReport,
-    slice_result: SliceResult,
-    gcode: GCodeReport,
+    slice_result: SliceResult | None,
+    gcode: GCodeReport | None,
     printability: PrintabilityReport,
     manifest: RunManifest,
     output_dir: Path,
@@ -293,6 +293,57 @@ def run_all(example_dir: Path, backend_name: str, *, output_dir: Path | None = N
         "mesh": mesh,
         "slice_result": slice_result,
         "gcode": gcode,
+        "printability": printability,
+        "manifest": manifest,
+        "report_path": report_path,
+    }
+
+
+def run_check(example_dir: Path, *, output_dir: Path | None = None) -> dict:
+    """Run build -> mesh -> evaluate -> report with slicing skipped entirely.
+
+    Distinct from `run_all()`, which keeps its full-fidelity contract and
+    still requires a working slicer: the mesh-derived printability checks
+    (manifold, build-volume fit, wall thickness) don't need one, so this is
+    the "the core doesn't need a slicer" path (see docs/environment.md).
+    Slicer-derived metrics (filament mass, print time, layer count) come back
+    `None` -- see printlab.evaluation.printability.
+    """
+    config = load_part_config(example_dir)
+    output_dir = Path(output_dir) if output_dir else default_output_dir(config, "check")
+    prepare_output_dir(output_dir, clean=True)
+
+    printer, _, _ = load_profiles(config)
+
+    step_path, stl_path = stage_build(config, output_dir)
+    mesh = stage_mesh(stl_path, output_dir)
+    printability = stage_evaluate(mesh, None, output_dir, printer=printer)
+
+    manifest = build_run_manifest(
+        input_hashes=hash_inputs({"cad_source": config.part_py, "stl": stl_path}),
+        profile_hashes=hash_inputs(
+            {
+                "printer": config.printer_profile_path,
+                "material": config.material_profile_path,
+                "process": config.process_profile_path,
+            }
+        ),
+    )
+    manifest = finalize_manifest(
+        manifest,
+        {
+            "mesh_report": hash_artifact(mesh),
+            "printability_report": hash_artifact(printability),
+        },
+    )
+    _write_json_atomic(output_dir / ARTIFACT_FILENAMES["run_manifest"], manifest)
+    report_path = stage_report(config, mesh, None, None, printability, manifest, output_dir)
+
+    return {
+        "output_dir": output_dir,
+        "step_path": step_path,
+        "stl_path": stl_path,
+        "mesh": mesh,
         "printability": printability,
         "manifest": manifest,
         "report_path": report_path,

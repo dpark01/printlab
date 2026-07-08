@@ -68,12 +68,16 @@ def _check_build_volume_fit(mesh: MeshReport, printer: PrinterProfile) -> Printa
     )
 
 
-def _check_layer_height_allowed(gcode: GCodeReport, printer: PrinterProfile) -> PrintabilityCheck:
-    if gcode.layer_height_mm is None:
+def _check_layer_height_allowed(gcode: GCodeReport | None, printer: PrinterProfile) -> PrintabilityCheck:
+    if gcode is None or gcode.layer_height_mm is None:
         return PrintabilityCheck(
             name="layer_height_allowed",
             status=Status.WARNING,
-            message="Layer height could not be determined from G-code.",
+            message=(
+                "Layer height unknown: no G-code available (slicing was skipped)."
+                if gcode is None
+                else "Layer height could not be determined from G-code."
+            ),
         )
     # 1 micron: real slicer G-code carries floating point noise across
     # hundreds of layers (observed directly: PrusaSlicer height comments
@@ -121,7 +125,12 @@ def _check_min_wall_thickness(mesh: MeshReport, printer: PrinterProfile) -> Prin
     )
 
 
-def evaluate(mesh: MeshReport, gcode: GCodeReport, printer: PrinterProfile) -> PrintabilityReport:
+def evaluate(mesh: MeshReport, gcode: GCodeReport | None, printer: PrinterProfile) -> PrintabilityReport:
+    """`gcode` is `None` when slicing was skipped (see `printlab check` /
+    `printlab.pipeline.run_check`): every mesh-derived check below still
+    runs, and the gcode-derived checks/metrics degrade to unknown rather
+    than failing outright.
+    """
     checks = [
         _check_manifold(mesh),
         _check_self_intersection(mesh),
@@ -137,10 +146,10 @@ def evaluate(mesh: MeshReport, gcode: GCodeReport, printer: PrinterProfile) -> P
         "overhang_area_mm2": mesh.overhang_area_mm2,
         "min_wall_thickness_mm": mesh.min_wall_thickness_mm,
         "max_unsupported_span_mm": mesh.max_unsupported_span_mm,
-        "layer_count": gcode.layer_count,
-        "filament_length_mm": gcode.filament_length_mm,
-        "filament_mass_g": gcode.filament_mass_g,
-        "estimated_time_s": gcode.estimated_time_s,
+        "layer_count": gcode.layer_count if gcode else None,
+        "filament_length_mm": gcode.filament_length_mm if gcode else None,
+        "filament_mass_g": gcode.filament_mass_g if gcode else None,
+        "estimated_time_s": gcode.estimated_time_s if gcode else None,
     }
 
     overall_status = Status.OK

@@ -34,14 +34,39 @@ def render(
     *,
     part_name: str,
     mesh: MeshReport,
-    slice_result: SliceResult,
-    gcode: GCodeReport,
+    slice_result: SliceResult | None,
+    gcode: GCodeReport | None,
     printability: PrintabilityReport,
     manifest: RunManifest,
 ) -> str:
+    # slice_result/gcode are None for printlab check (see pipeline.run_check):
+    # slicing was skipped entirely, not merely failed.
     dims = tuple(mesh.bbox.max[i] - mesh.bbox.min[i] for i in range(3))
     overall_class = _STATUS_CLASS[printability.status]
     overall_label = _STATUS_LABEL[printability.status]
+
+    backend_line = (
+        f"<code>{_escape(slice_result.backend)} {_escape(slice_result.backend_version)}</code>"
+        if slice_result
+        else "<code>none (slicing skipped)</code>"
+    )
+
+    if gcode:
+        slicing_rows = f"""<tr><td>Layers</td>
+<td>{gcode.layer_count} (layer height: {gcode.layer_height_mm} mm)</td></tr>
+<tr><td>Filament</td><td>{gcode.filament_length_mm:.1f} mm / {gcode.filament_mass_g:.2f} g</td></tr>
+<tr><td>Estimated print time</td><td>{gcode.estimated_time_s / 60:.1f} min
+<span class="advisory">(advisory &mdash; parsed from the slicer's own estimate,
+not independently computed)</span></td></tr>"""
+    else:
+        slicing_rows = (
+            '<tr><td colspan="2" class="advisory">Skipped (no slicer run) -- '
+            "filament/time metrics unavailable; checks below cover geometry only.</td></tr>"
+        )
+
+    resolved_settings_hash = (
+        _escape(slice_result.resolved_settings_sha256 or "n/a") if slice_result else "n/a"
+    )
 
     checks_rows = "\n".join(
         f"<tr><td class='{_STATUS_CLASS[check.status]}'>{_STATUS_LABEL[check.status]}</td>"
@@ -58,7 +83,7 @@ def render(
 </head>
 <body>
 <h1>PrintLab Report: {_escape(part_name)}</h1>
-<p>Backend: <code>{_escape(slice_result.backend)} {_escape(slice_result.backend_version)}</code>
+<p>Backend: {backend_line}
 &mdash; Overall status: <span class="{overall_class}">{overall_label}</span></p>
 
 <h2>Geometry</h2>
@@ -71,11 +96,7 @@ def render(
 
 <h2>Slicing</h2>
 <table>
-<tr><td>Layers</td><td>{gcode.layer_count} (layer height: {gcode.layer_height_mm} mm)</td></tr>
-<tr><td>Filament</td><td>{gcode.filament_length_mm:.1f} mm / {gcode.filament_mass_g:.2f} g</td></tr>
-<tr><td>Estimated print time</td><td>{gcode.estimated_time_s / 60:.1f} min
-<span class="advisory">(advisory &mdash; parsed from the slicer's own estimate,
-not independently computed)</span></td></tr>
+{slicing_rows}
 </table>
 
 <h2>Printability Checks</h2>
@@ -88,7 +109,7 @@ not independently computed)</span></td></tr>
 <tr><td>PrintLab version</td><td><code>{_escape(manifest.printlab_version)}</code></td></tr>
 <tr><td>Git commit</td><td><code>{_escape(manifest.git_commit or "n/a")}</code></td></tr>
 <tr><td>Slicer resolved-settings hash</td>
-<td><code>{_escape(slice_result.resolved_settings_sha256 or "n/a")}</code></td></tr>
+<td><code>{resolved_settings_hash}</code></td></tr>
 <tr><td>Run content hash</td><td><code>{_escape(manifest.content_hash or "n/a")}</code></td></tr>
 </table>
 </body>

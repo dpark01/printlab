@@ -86,6 +86,38 @@ def test_render_html_includes_key_sections_and_is_well_formed():
     assert "0.1.0" in text
 
 
+def test_render_markdown_handles_skipped_slicing():
+    """printlab check passes slice_result=gcode=None -- the report must
+    render a coherent 'skipped' state, not crash on attribute access."""
+    mesh, _slice_result, _gcode, printability, manifest = _sample_artifacts()
+    text = render_markdown(
+        part_name="bracket",
+        mesh=mesh,
+        slice_result=None,
+        gcode=None,
+        printability=printability,
+        manifest=manifest,
+    )
+    assert "bracket" in text
+    assert "skipped" in text.lower()
+    assert "manifold_watertight" in text
+
+
+def test_render_html_handles_skipped_slicing():
+    mesh, _slice_result, _gcode, printability, manifest = _sample_artifacts()
+    text = render_html(
+        part_name="bracket",
+        mesh=mesh,
+        slice_result=None,
+        gcode=None,
+        printability=printability,
+        manifest=manifest,
+    )
+    assert text.startswith("<!DOCTYPE html>")
+    assert "</html>" in text
+    assert "skipped" in text.lower()
+
+
 def test_render_html_escapes_untrusted_text_fields():
     """Check messages could in principle contain arbitrary text; the HTML
     renderer must not let that break out of its containing element."""

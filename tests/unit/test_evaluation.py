@@ -122,3 +122,36 @@ def test_metrics_are_populated():
     report = evaluate(_mesh(), _gcode(), _printer())
     assert report.metrics["volume_mm3"] == 1000.0
     assert report.metrics["layer_count"] == 10
+
+
+def test_no_gcode_still_runs_mesh_derived_checks():
+    """printlab check (pipeline.run_check) passes gcode=None when slicing was
+    skipped entirely -- mesh-derived checks must still produce a real verdict."""
+    mesh = _mesh(min_wall_thickness_mm=0.1)  # printer min_feature_size_mm is 0.4
+    report = evaluate(mesh, None, _printer())
+    assert report.status is Status.WARNING
+    manifold_check = next(c for c in report.checks if c.name == "manifold_watertight")
+    assert manifold_check.status is Status.OK
+    wall_check = next(c for c in report.checks if c.name == "min_wall_thickness")
+    assert wall_check.status is Status.WARNING
+
+
+def test_no_gcode_degrades_layer_height_check_to_warning_not_error():
+    report = evaluate(_mesh(), None, _printer())
+    check = next(c for c in report.checks if c.name == "layer_height_allowed")
+    assert check.status is Status.WARNING
+
+
+def test_no_gcode_nulls_gcode_derived_metrics():
+    report = evaluate(_mesh(), None, _printer())
+    assert report.metrics["volume_mm3"] == 1000.0
+    assert report.metrics["layer_count"] is None
+    assert report.metrics["filament_length_mm"] is None
+    assert report.metrics["filament_mass_g"] is None
+    assert report.metrics["estimated_time_s"] is None
+
+
+def test_no_gcode_non_manifold_mesh_is_still_an_error():
+    mesh = _mesh(manifold=False, watertight=False)
+    report = evaluate(mesh, None, _printer())
+    assert report.status is Status.ERROR
