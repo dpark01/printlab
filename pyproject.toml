@@ -20,10 +20,14 @@ dependencies = [
 
 [project.scripts]
 printlab = "printlab.cli.main:app"
+printlab-mcp = "printlab_mcp.server:main"
 
 [project.optional-dependencies]
 fea = [
     "gmsh>=4.12,<5",
+]
+mcp = [
+    "fastmcp>=3.4,<4",
 ]
 
 [dependency-groups]
@@ -37,7 +41,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["printlab"]
+packages = ["printlab", "printlab_mcp"]
 
 [tool.ruff]
 line-length = 110
