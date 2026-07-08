@@ -29,17 +29,30 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.11.27"
-      # Unlike the three slicers (GUI apps with no clean headless Linux
-      # packaging -- see docs/environment.md), CalculiX is a small, GUI-free
-      # CLI solver that's genuinely apt-installable here. Non-fatal: if
-      # Ubuntu's package lags Debian's, tests/integration/test_fea_hook.py
-      # and test_mcp_smoke.py's FEA case self-skip via shutil.which("ccx"),
-      # same as the slicer self-skip pattern below. libglu1-mesa is a
-      # separate, easy-to-miss requirement: gmsh's C extension dlopen()s
-      # libGLU at import time even though we only use its headless meshing
-      # API, never its GUI/OpenGL viewer -- observed directly as an OSError
-      # ("libGLU.so.1: cannot open shared object file") on a bare runner.
-      - run: sudo apt-get update && sudo apt-get install -y calculix-ccx libglu1-mesa || true
+      # Mandatory, not best-effort: examples/canoe engraves text via
+      # CadQuery/OCCT with font="Arial", which doesn't exist on Linux by
+      # default and isn't gated by any capability-skip (unlike ccx/gmsh
+      # below) -- OCCT's font lookup for a genuinely missing font crashes
+      # the process outright rather than raising a catchable Python
+      # exception, which surfaced as a bare "The operation was canceled"
+      # with no traceback partway through the canoe golden test. Debian's
+      # fontconfig-config ships standard metric-alias substitution rules
+      # that resolve "Arial" requests to Liberation Sans once
+      # fonts-liberation is installed -- the same mechanism LibreOffice/
+      # browsers rely on for Linux "Arial" compatibility.
+      - run: sudo apt-get update && sudo apt-get install -y fontconfig fonts-liberation
+      # Unlike that font package, CalculiX/libGLU are genuinely best-effort:
+      # CalculiX is a small, GUI-free CLI solver that's normally
+      # apt-installable here, but if Ubuntu's package ever lags Debian's,
+      # tests/integration/test_fea_hook.py and test_mcp_smoke.py's FEA case
+      # self-skip via find_ccx_binary(), same as the slicer self-skip
+      # pattern below. libglu1-mesa is a separate, easy-to-miss requirement:
+      # gmsh's C extension dlopen()s libGLU at import time even though we
+      # only use its headless meshing API, never its GUI/OpenGL viewer --
+      # observed directly as an OSError ("libGLU.so.1: cannot open shared
+      # object file") on a bare runner; tests.conftest.skip_unless_importable
+      # treats that the same as gmsh being absent, so this is safe to let fail.
+      - run: sudo apt-get install -y calculix-ccx libglu1-mesa || true
       - run: uv sync --extra fea --extra mcp
       # No slicer is installed on this runner, so tests/integration's
       # slicer-dependent cases self-skip via backend.detect().available
