@@ -145,7 +145,19 @@ third example, `examples/canoe` (a hollow superellipse hull with engraved
 text), joined the golden/integration test suites — its engraved lettering
 persistently trips the `min_wall_thickness` check via ray-cast noise on
 sharp glyph corners, a known heuristic artifact rather than a real design
-flaw (see `printlab/mesh/wall_thickness.py`).
+flaw (see `printlab/mesh/wall_thickness.py`). A fourth, `examples/benchy`
+(the standard 3DBenchy torture-test hull, vendored as a CC0 STEP file rather
+than built from primitives, sliced with a new supports-enabled `supports`
+process profile), joined the build/slice integration coverage and the CI
+smoke-build, but was deliberately kept out of `mesh`/`evaluate`/`check`/`all`
+and the golden reproducibility test: its STEP-to-mesh tessellation produces
+some zero-area triangles, and `estimate_min_wall_thickness_mm` doesn't guard
+against the resulting NaN normals (`printlab/mesh/wall_thickness.py`'s
+`unit_normals` division), which crashes ray casting outright with an
+uncaught `rtree` error rather than degrading gracefully — a real bug,
+distinct from (and more severe than) the OOM `ef974aa` fixed for canoe, left
+as a known follow-up rather than fixed here. `build`/`slice`/`gcode` are
+unaffected since they never call wall-thickness estimation.
 
 `printlab render` (`printlab/rendering/`) offscreen-renders a built part to
 PNGs via matplotlib/Agg — already a transitive dependency, so no new
