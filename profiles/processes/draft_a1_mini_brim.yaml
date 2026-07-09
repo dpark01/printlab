@@ -1,0 +1,21 @@
+# Same as draft_a1_mini.yaml but with brim enabled -- kept as a separate profile
+# (rather than flipping brim in draft_a1_mini.yaml) so this only affects designs
+# that opt into it, not every example that references the shared draft profile.
+#
+# Added for Canoe_10x: a 10-part plate of canoe hulls with pointed bow/stern tips
+# (minimal first-layer bed contact area) packed close together via a staggered
+# quincunx layout. Without a brim, one hull's tip lifted mid-print and the
+# print head dragged it across several neighbors. A brim adds first-layer contact
+# area specifically at those weak points; native_bundle and every other setting
+# are unchanged from draft_a1_mini.yaml.
+schema_version: "0.1.0"
+name: "draft_brim"
+layer_height_mm: 0.2
+infill_percent: 15.0
+supports: false
+brim: true
+wall_count: 2
+native_bundle:
+  bambu: profiles/native/bambu/process_draft_0.2_a1_mini.json
+  prusaslicer: profiles/native/prusaslicer/process_draft_0.2.ini
+  orcaslicer: profiles/native/bambu/process_draft_0.2_a1_mini.json
