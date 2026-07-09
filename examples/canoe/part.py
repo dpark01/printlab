@@ -1,6 +1,6 @@
 """A small decorative canoe: a hollow, double-pointed hull with three flush
-thwarts, a recessed "56" on the bow deck, and "2026" / "MHA" engraved into
-the port / starboard hull sides near the bow.
+thwarts, a recessed "BOW" on the bow deck, and "PORT" / "STARBOARD" engraved
+into the port / starboard hull sides.
 
 This is the only file in this example an agent (or a human) should edit —
 `build()` is CAD source. Everything under an output/ directory is a
@@ -25,10 +25,10 @@ off by a plane cut to form the flat deck. Only the mid section is hollowed,
 via `Workplane.shell()`, which is what gives it a genuinely uniform wall
 thickness (rather than tapering off wall thickness by hand). The bow/stern
 caps stay solid — which is also where the bow deck has enough flat area to
-engrave the hull number. A superellipse (exponent > 2) is used instead of a
-true ellipse so the sides run closer to vertical near the waterline, both
-for a more hull-like profile and so the port/starboard text sits on a
-surface that curves less steeply.
+engrave text. A superellipse (exponent > 2) is used instead of a true
+ellipse so the sides run closer to vertical near the waterline, both for a
+more hull-like profile and so the port/starboard text sits on a surface
+that curves less steeply.
 
 Building the mid section as its own loft (instead of trimming it out of one
 loft spanning the whole length) matters: a trimmed face still carries the
@@ -66,9 +66,10 @@ STATIONS_STERN = 9
 
 FLAT_KEEL_SHAVE = 1.0  # mm shaved off the very bottom of the hull so the display orientation sits flat
 
-BOW_TEXT = "56"
-BOW_TEXT_SIZE = 5.0
-BOW_TEXT_DEPTH = 1.0
+BOW_TEXT = "BOW"
+BOW_TEXT_SIZE = 3.6  # sized to fit within the solid bow deck (ends at CAV_T0 * LENGTH = 12mm),
+# clear of the tip
+BOW_TEXT_DEPTH = 0.8
 BOW_TEXT_X = 8.2  # within the solid bow deck (ends at CAV_T0 * LENGTH = 12mm), clear of the tip
 
 THWART_STATIONS = (0.32, 0.5, 0.68)
@@ -77,19 +78,20 @@ THWART_TOP_Z = 0.0  # flush with the deck/gunwale, not raised above it
 THWART_BOTTOM_Z = -1.6
 THWART_INSET = 0.4  # embed the thwart ends inside the outer surface for a clean fuse
 
-SIDE_TEXT_PORT = "2026"
-SIDE_TEXT_STARBOARD = "MHA"
-SIDE_TEXT_SIZE = 3.3  # bumped up slightly from 3.0 for readability; see SIDE_TEXT_PITCH
-SIDE_TEXT_DEPTH = 0.5  # bumped up slightly from 0.4 for readability -- still shallow:
-# the mid-section wall here is only WALL thick, and printlab_check's min_wall_thickness
-# margin under this text was already tight (0.41mm at depth 0.4), so re-check after
-# any further increase.
-SIDE_TEXT_X = 22.0  # near the bow, well into the thin-walled mid section
+SIDE_TEXT_PORT = "PORT"
+SIDE_TEXT_STARBOARD = "STARBOARD"
+SIDE_TEXT_SIZE = 3.0
+SIDE_TEXT_DEPTH = 0.5  # still shallow: the mid-section wall here is only WALL thick, and
+# printlab_check's min_wall_thickness margin under this text is tight (~0.44mm at these
+# settings), so re-check after any depth/size/position change.
+SIDE_TEXT_X = 35  # near midship, not near the bow: "STARBOARD" is long enough that at the
+# bow's sharper taper, the flat-plane tangent cut (see _glyph_cutter) diverges too far from
+# the true curved surface across some letters, thinning the wall below the 0.4mm minimum
+# feature size; midship's gentler curvature keeps that divergence small enough to pass.
 SIDE_TEXT_Z = -2.0  # below the gunwale (z=0), above the waterline-ish depth
-SIDE_TEXT_PITCH = 2.3  # per-glyph advance along the hull length, bumped slightly with
-# SIDE_TEXT_SIZE to keep the same relative spacing. Each glyph sits on its own tangent
-# plane so the word follows the bow taper; fixed pitch = evenly spaced glyphs (tune by
-# eye via printlab_render).
+SIDE_TEXT_PITCH = 2.3  # per-glyph advance along the hull length. Each glyph sits on its own
+# tangent plane so the word follows the hull's curve; fixed pitch = evenly spaced glyphs
+# (tune by eye via printlab_render).
 SIDE_TEXT_OVERSHOOT = 0.15  # start the cut this far *outside* the analytic surface point, so
 # it always crosses the small gap between the analytic curve and the actual faceted loft surface
 # (skipping this left a sliver of un-cut skin over the recess -- a disconnected shell, not a warning)
