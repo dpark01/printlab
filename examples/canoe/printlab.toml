@@ -1,5 +1,8 @@
 # Example part configuration for `printlab build|mesh|slice|... examples/canoe`.
-# Paths are resolved relative to the repository root.
+# Paths are resolved relative to the printlab MCP server's working directory
+# at launch -- typically wherever printlab was installed via
+# `uv --directory <path>`, not this file's location. Run printlab_doctor to
+# confirm which backends that installation can see.
 
 [part]
 name = "canoe"

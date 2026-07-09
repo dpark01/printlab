@@ -39,10 +39,24 @@ class MeshReport(PrintLabArtifact):
     overhang_area_mm2: float = 0.0
     overhang_histogram: dict[str, float] = Field(default_factory=dict)
 
-    # Wall thickness -- see printlab.mesh.wall_thickness. None means ray
-    # casting produced no usable samples (e.g. a badly broken mesh), not
-    # "no thin walls found."
-    min_wall_thickness_mm: float | None = None
+    min_wall_thickness_mm: float | None = Field(
+        default=None,
+        description=(
+            "5th-percentile of per-face ray-cast thickness readings, not a "
+            "strict minimum -- can overestimate true worst-case thickness "
+            "near sharp edges (see printlab.mesh.wall_thickness for the "
+            "worked example). None means ray casting produced no usable "
+            "samples (e.g. a badly broken mesh), not 'no thin walls found.'"
+        ),
+    )
+    min_wall_thickness_location: tuple[float, float, float] | None = Field(
+        default=None,
+        description=(
+            "Centroid, in the part's native coordinate frame, of the face "
+            "nearest the reported min_wall_thickness_mm percentile. None "
+            "whenever min_wall_thickness_mm is None."
+        ),
+    )
 
     # Longest contiguous unsupported region's span -- see
     # printlab.mesh.bridges. None means there are no overhang regions at

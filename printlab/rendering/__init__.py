@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 import trimesh
 
@@ -40,22 +41,44 @@ def render(
     views: Sequence[str | CameraView] = DEFAULT_VIEWS,
     width_px: int = 800,
     height_px: int = 600,
+    layout: Literal["separate", "grid"] = "separate",
+    focus_center: tuple[float, float, float] | None = None,
+    focus_radius: float | None = None,
 ) -> RenderReport:
     """Load an STL and render it from each requested view.
 
     Not part of `printlab all`'s critical path (like printlab.mesh.orient):
     explicitly invoked via `printlab render`. String entries in `views` are
     resolved against PRESET_VIEWS; pass a `CameraView` directly for a custom
-    angle not covered by a preset.
+    angle not covered by a preset. `layout="grid"` composites up to 4 views
+    into one PNG instead of one file per view (see `render_views`).
+    `focus_center`/`focus_radius` zoom into a fixed region instead of framing
+    the whole mesh -- useful for a small feature on an otherwise large part.
     """
     stl_path = Path(stl_path)
     input_sha256 = hash_file(stl_path)
     mesh = trimesh.load(stl_path, force="mesh")
 
     resolved_views = [PRESET_VIEWS[v] if isinstance(v, str) else v for v in views]
-    rendered = render_views(mesh, output_dir, views=resolved_views, width_px=width_px, height_px=height_px)
+    rendered = render_views(
+        mesh,
+        output_dir,
+        views=resolved_views,
+        width_px=width_px,
+        height_px=height_px,
+        layout=layout,
+        focus_center=focus_center,
+        focus_radius=focus_radius,
+    )
 
-    return RenderReport(input_path=stl_path, input_sha256=input_sha256, views=rendered)
+    return RenderReport(
+        input_path=stl_path,
+        input_sha256=input_sha256,
+        views=rendered,
+        layout=layout,
+        focus_center=focus_center,
+        focus_radius=focus_radius,
+    )
 
 
 __all__ = [

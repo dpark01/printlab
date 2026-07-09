@@ -16,6 +16,7 @@ render; that is what hash_artifact() covers.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -55,3 +56,23 @@ class RenderReport(PrintLabArtifact):
     input_path: Path
     input_sha256: str
     views: list[RenderedView] = Field(default_factory=list)
+    layout: Literal["separate", "grid"] = Field(
+        default="separate",
+        description=(
+            "'separate' writes one PNG per view (each view's own output_path). "
+            "'grid' composites all views (up to 4) into a single 2x2 PNG -- "
+            "every RenderedView in `views` then shares that one output_path."
+        ),
+    )
+    focus_center: tuple[float, float, float] | None = Field(
+        default=None,
+        description=(
+            "Region-of-interest override, in the part's native coordinate "
+            "frame: when set (with focus_radius), every view is framed on a "
+            "fixed cube around this point instead of the full mesh bounds."
+        ),
+    )
+    focus_radius: float | None = Field(
+        default=None,
+        description="Half-width (mm) of the focus_center cube; None means no zoom override was applied.",
+    )

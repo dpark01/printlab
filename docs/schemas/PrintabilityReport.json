@@ -141,6 +141,7 @@
     },
     "provisional_score": {
       "default": 100,
+      "description": "UNCALIBRATED 0-100 triage number from a fixed, arbitrary per-check penalty (see printlab.evaluation.printability). Integer, not float: a discrete penalty scheme produces round numbers, and a float would imply precision this does not have. Do not optimize it -- reason about `checks`/`metrics` instead. Only meaningful once `score_calibrated` is True.",
       "title": "Provisional Score",
       "type": "integer"
     },
@@ -151,6 +152,7 @@
     },
     "score_calibrated": {
       "default": false,
+      "description": "Always False in v1: the score's weights are not derived from real print outcomes. This is the machine-readable \"do not trust `provisional_score` as ground truth\" flag -- branch on it instead of reading a docstring.",
       "title": "Score Calibrated",
       "type": "boolean"
     },

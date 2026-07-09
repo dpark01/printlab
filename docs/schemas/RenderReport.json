@@ -97,6 +97,45 @@
       "title": "Errors",
       "type": "array"
     },
+    "focus_center": {
+      "anyOf": [
+        {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Region-of-interest override, in the part's native coordinate frame: when set (with focus_radius), every view is framed on a fixed cube around this point instead of the full mesh bounds.",
+      "title": "Focus Center"
+    },
+    "focus_radius": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Half-width (mm) of the focus_center cube; None means no zoom override was applied.",
+      "title": "Focus Radius"
+    },
     "input_path": {
       "format": "path",
       "title": "Input Path",
@@ -104,6 +143,16 @@
     },
     "input_sha256": {
       "title": "Input Sha256",
+      "type": "string"
+    },
+    "layout": {
+      "default": "separate",
+      "description": "'separate' writes one PNG per view (each view's own output_path). 'grid' composites all views (up to 4) into a single 2x2 PNG -- every RenderedView in `views` then shares that one output_path.",
+      "enum": [
+        "separate",
+        "grid"
+      ],
+      "title": "Layout",
       "type": "string"
     },
     "schema_version": {

@@ -1,10 +1,12 @@
 """A parametric L-bracket: a mounting-hole demo part for the PrintLab v0.1 vertical slice.
 
 This is the only file in this example an agent (or a human) should edit —
-`build()` is CAD source; everything else in an output/ directory is a
-generated artifact (see AGENTS.md). Built directly from Shape-level
-primitives (rather than a Workplane sketch) so hole placement is exact and
-independent of workplane-orientation assumptions.
+`build()` is CAD source. Everything under an output/ directory is a
+generated artifact: it is regenerated (and any hand edits silently
+overwritten) every time this part is built, so never hand-edit anything
+there. Built directly from Shape-level primitives (rather than a Workplane
+sketch) so hole placement is exact and independent of workplane-orientation
+assumptions.
 """
 
 from __future__ import annotations

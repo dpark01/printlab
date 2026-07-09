@@ -32,8 +32,24 @@ entirely rather than treated as zero thickness; a caller should treat `None`
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 import trimesh
+
+
+@dataclass(frozen=True)
+class WallThicknessEstimate:
+    """`estimate_min_wall_thickness`'s result: the percentile thickness value
+    plus *where* it was sampled, so a caller can localize a thin region
+    instead of only knowing a scalar exists."""
+
+    value_mm: float
+    #: Centroid of the face whose per-face median reading is closest to
+    #: `value_mm` -- i.e. a representative point in the thin region, not
+    #: necessarily the single thinnest face (percentile, not minimum; see
+    #: module docstring).
+    location: tuple[float, float, float]
 
 #: How far to nudge each ray's origin inside the surface before casting, so
 #: it doesn't immediately self-intersect the face it started on.
@@ -93,17 +109,17 @@ def _cone_directions(normals: np.ndarray, half_angle_deg: float, side_rays: int)
     return np.stack(directions, axis=0)
 
 
-def estimate_min_wall_thickness_mm(
+def estimate_min_wall_thickness(
     mesh: trimesh.Trimesh,
     epsilon_mm: float = DEFAULT_SAMPLE_EPSILON_MM,
     cone_half_angle_deg: float = DEFAULT_CONE_HALF_ANGLE_DEG,
     cone_side_rays: int = DEFAULT_CONE_SIDE_RAYS,
     percentile: float = DEFAULT_PERCENTILE,
-) -> float | None:
-    """Return the estimated wall thickness in mm (the `percentile`-th
-    percentile of per-face readings -- see module docstring for why this is
-    not the strict minimum), or None if no face produced a usable ray hit
-    (e.g. a badly broken mesh)."""
+) -> WallThicknessEstimate | None:
+    """Return the estimated wall thickness (the `percentile`-th percentile of
+    per-face readings -- see module docstring for why this is not the strict
+    minimum) plus a representative location, or None if no face produced a
+    usable ray hit (e.g. a badly broken mesh)."""
     centroids = mesh.triangles_center
     normals = mesh.face_normals
     num_faces = len(centroids)
@@ -139,7 +155,36 @@ def estimate_min_wall_thickness_mm(
         for face_idx, distance in zip(hit_face_indices, hit_distances, strict=True):
             per_face_hits.setdefault(int(face_idx), []).append(float(distance))
 
-    per_face_medians = [float(np.median(hits)) for hits in per_face_hits.values()]
-    if not per_face_medians:
+    if not per_face_hits:
         return None
-    return float(np.percentile(per_face_medians, percentile))
+    # Keep face indices alongside their medians (instead of collapsing to
+    # `.values()`) so the percentile value can be traced back to a location.
+    face_ids = list(per_face_hits.keys())
+    per_face_medians = [float(np.median(per_face_hits[face_id])) for face_id in face_ids]
+    value_mm = float(np.percentile(per_face_medians, percentile))
+    # No single face reads exactly at the percentile value; report the
+    # location of whichever face's median is closest to it as a
+    # representative point in the thin region.
+    closest = int(np.argmin(np.abs(np.array(per_face_medians) - value_mm)))
+    location = tuple(float(c) for c in centroids[face_ids[closest]])
+    return WallThicknessEstimate(value_mm=value_mm, location=location)
+
+
+def estimate_min_wall_thickness_mm(
+    mesh: trimesh.Trimesh,
+    epsilon_mm: float = DEFAULT_SAMPLE_EPSILON_MM,
+    cone_half_angle_deg: float = DEFAULT_CONE_HALF_ANGLE_DEG,
+    cone_side_rays: int = DEFAULT_CONE_SIDE_RAYS,
+    percentile: float = DEFAULT_PERCENTILE,
+) -> float | None:
+    """Backward-compatible scalar wrapper around `estimate_min_wall_thickness`
+    -- see that function's docstring. Used by callers (e.g. orientation
+    search) that only need the value, not its location."""
+    estimate = estimate_min_wall_thickness(
+        mesh,
+        epsilon_mm=epsilon_mm,
+        cone_half_angle_deg=cone_half_angle_deg,
+        cone_side_rays=cone_side_rays,
+        percentile=percentile,
+    )
+    return estimate.value_mm if estimate is not None else None

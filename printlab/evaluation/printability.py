@@ -134,6 +134,11 @@ def _check_min_wall_thickness(mesh: MeshReport, printer: PrinterProfile) -> Prin
             message="Wall thickness could not be estimated (ray casting produced no usable samples).",
         )
     ok = mesh.min_wall_thickness_mm >= printer.min_feature_size_mm
+    location_suffix = (
+        f" Thin region centered near {mesh.min_wall_thickness_location} (part-native coordinates)."
+        if mesh.min_wall_thickness_location is not None
+        else ""
+    )
     return PrintabilityCheck(
         name="min_wall_thickness",
         status=Status.OK if ok else Status.WARNING,
@@ -143,7 +148,9 @@ def _check_min_wall_thickness(mesh: MeshReport, printer: PrinterProfile) -> Prin
             if ok
             else f"Estimated wall thickness {mesh.min_wall_thickness_mm:.2f}mm is below "
             f"{printer.name}'s {printer.min_feature_size_mm}mm minimum feature size "
-            "(approximate -- see printlab.mesh.wall_thickness limitations)."
+            "(5th-percentile of per-face ray-cast readings, not a strict minimum -- "
+            "can overestimate true worst-case thickness near sharp edges)."
+            f"{location_suffix}"
         ),
         metric_value=mesh.min_wall_thickness_mm,
         threshold=printer.min_feature_size_mm,

@@ -3,8 +3,10 @@ thwarts, a recessed "56" on the bow deck, and "2026" / "MHA" engraved into
 the port / starboard hull sides near the bow.
 
 This is the only file in this example an agent (or a human) should edit —
-`build()` is CAD source; everything else in an output/ directory is a
-generated artifact (see AGENTS.md).
+`build()` is CAD source. Everything under an output/ directory is a
+generated artifact: it is regenerated (and any hand edits silently
+overwritten) every time this part is built, so never hand-edit anything
+there.
 
 All shaping/placement below is done in a "natural" (display) frame: bow at
 x=0, keel at the bottom (z<0), rim/deck at z=0 — i.e. the canoe sits the way

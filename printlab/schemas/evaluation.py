@@ -44,16 +44,26 @@ class PrintabilityReport(PrintLabArtifact):
     metrics: dict[str, float | int | bool | str | None] = Field(default_factory=dict)
     checks: list[PrintabilityCheck] = Field(default_factory=list)
 
-    #: UNCALIBRATED 0-100 triage number from a fixed, arbitrary per-check
-    #: penalty (see printlab.evaluation.printability). Integer, not float: a
-    #: discrete penalty scheme produces round numbers, and a float would imply
-    #: precision this does not have. Do not optimize it -- reason about
-    #: `checks`/`metrics`. Only meaningful once `score_calibrated` is True.
-    provisional_score: int = 100
-    #: Always False in v1: the score's weights are not derived from real print
-    #: outcomes. This is the machine-readable "do not trust `provisional_score`
-    #: as ground truth" flag -- branch on it instead of reading a docstring.
-    score_calibrated: bool = False
+    provisional_score: int = Field(
+        default=100,
+        description=(
+            "UNCALIBRATED 0-100 triage number from a fixed, arbitrary "
+            "per-check penalty (see printlab.evaluation.printability). "
+            "Integer, not float: a discrete penalty scheme produces round "
+            "numbers, and a float would imply precision this does not have. "
+            "Do not optimize it -- reason about `checks`/`metrics` instead. "
+            "Only meaningful once `score_calibrated` is True."
+        ),
+    )
+    score_calibrated: bool = Field(
+        default=False,
+        description=(
+            "Always False in v1: the score's weights are not derived from "
+            "real print outcomes. This is the machine-readable \"do not "
+            "trust `provisional_score` as ground truth\" flag -- branch on "
+            "it instead of reading a docstring."
+        ),
+    )
 
     @property
     def failure_count(self) -> int:

@@ -146,6 +146,32 @@
       "default": null,
       "title": "Max Unsupported Span Mm"
     },
+    "min_wall_thickness_location": {
+      "anyOf": [
+        {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Centroid, in the part's native coordinate frame, of the face nearest the reported min_wall_thickness_mm percentile. None whenever min_wall_thickness_mm is None.",
+      "title": "Min Wall Thickness Location"
+    },
     "min_wall_thickness_mm": {
       "anyOf": [
         {
@@ -156,6 +182,7 @@
         }
       ],
       "default": null,
+      "description": "5th-percentile of per-face ray-cast thickness readings, not a strict minimum -- can overestimate true worst-case thickness near sharp edges (see printlab.mesh.wall_thickness for the worked example). None means ray casting produced no usable samples (e.g. a badly broken mesh), not 'no thin walls found.'",
       "title": "Min Wall Thickness Mm"
     },
     "overhang_area_mm2": {

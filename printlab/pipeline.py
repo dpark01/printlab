@@ -17,6 +17,7 @@ import tomllib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -85,13 +86,42 @@ class PartConfig:
     fea_load_case: FEALoadCase | None = None
 
 
+#: Shown verbatim in load_part_config's missing-toml error, and used to
+#: scaffold printlab_mcp.tools.printlab_init's output -- keep both in sync.
+_MISSING_TOML_EXAMPLE = """\
+[part]
+name = "my_part"
+module = "part.py"
+function = "build"
+
+[profiles]
+printer = "profiles/printers/bambu_a1.yaml"
+material = "profiles/materials/pla.yaml"
+process = "profiles/processes/draft.yaml"
+"""
+
+
 def load_part_config(example_dir: Path, *, repo_root: Path | None = None) -> PartConfig:
-    """Read `<example_dir>/printlab.toml`. Profile paths are relative to repo_root."""
+    """Read `<example_dir>/printlab.toml`.
+
+    `[profiles]` paths are resolved relative to `repo_root` -- which defaults
+    to `Path.cwd()`, i.e. *this process's* working directory at the time this
+    function runs, not `example_dir`'s location. For a `printlab-mcp` server
+    launched via `uv --directory <path> run printlab-mcp`, that's fixed at
+    server-launch time to `<path>`; call `printlab_doctor` (over MCP) or
+    `printlab doctor` (CLI) to confirm what it resolved to.
+    """
     example_dir = Path(example_dir).resolve()
     repo_root = Path(repo_root).resolve() if repo_root else Path.cwd().resolve()
     config_path = example_dir / "printlab.toml"
     if not config_path.is_file():
-        raise PipelineError(f"missing printlab.toml in {example_dir}")
+        raise PipelineError(
+            f"missing printlab.toml in {example_dir}\n\n"
+            "A minimal valid printlab.toml looks like:\n\n"
+            f"{_MISSING_TOML_EXAMPLE}\n"
+            "(scaffold one automatically with printlab_init over MCP, or hand-write "
+            "one following an existing example, e.g. examples/bracket/printlab.toml)"
+        )
 
     with config_path.open("rb") as fh:
         data = tomllib.load(fh)
@@ -186,13 +216,27 @@ def stage_render(
     views: Sequence[str | CameraView] = DEFAULT_VIEWS,
     width_px: int = 800,
     height_px: int = 600,
+    layout: Literal["separate", "grid"] = "separate",
+    focus_center: tuple[float, float, float] | None = None,
+    focus_radius: float | None = None,
 ) -> RenderReport:
     """Not part of `run_all()`'s critical path (like stage_repair/
     stage_orientation_search): an explicit, image-producing capability. The
     PNGs themselves are not part of the reproducibility contract -- only this
-    JSON's camera metadata is (see printlab.schemas.rendering).
+    JSON's camera metadata is (see printlab.schemas.rendering). `layout="grid"`
+    tiles up to 4 views into one composited PNG; `focus_center`/`focus_radius`
+    zoom into a fixed region instead of framing the whole mesh.
     """
-    report = render_part(stl_path, output_dir, views=views, width_px=width_px, height_px=height_px)
+    report = render_part(
+        stl_path,
+        output_dir,
+        views=views,
+        width_px=width_px,
+        height_px=height_px,
+        layout=layout,
+        focus_center=focus_center,
+        focus_radius=focus_radius,
+    )
     _write_json_atomic(output_dir / ARTIFACT_FILENAMES["render_report"], report)
     return report
 

@@ -11,6 +11,7 @@ requires matching pinned tool versions, never a hidden default.
 from __future__ import annotations
 
 import importlib.util
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +50,17 @@ def load_build_function(part_py: Path, function_name: str = "build") -> Callable
     if spec is None or spec.loader is None:
         raise PartBuildError(f"could not load part module: {part_py}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # exec_module() writes a __pycache__/*.pyc next to part_py by default --
+    # pure build byproduct, never useful to a caller, and it can land in an
+    # example_dir PrintLab doesn't otherwise manage (e.g. a shared design
+    # folder outside this repo). Suppress it for the duration of this import
+    # only; restore afterward so it doesn't affect unrelated imports.
+    previous_dont_write_bytecode = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous_dont_write_bytecode
 
     build_fn = getattr(module, function_name, None)
     if build_fn is None or not callable(build_fn):

@@ -48,6 +48,67 @@ def test_check_bogus_dir_is_error():
     assert result.is_error is True
 
 
+def test_render_grid_layout_dedupes_images():
+    result = _call(
+        "printlab_render",
+        {
+            "example_dir": str(EXAMPLES_DIR / "bracket"),
+            "views": ["top", "front", "right", "iso"],
+            "layout": "grid",
+        },
+    )
+    assert result.is_error is False
+    assert result.structured_content["layout"] == "grid"
+    assert len(result.structured_content["views"]) == 4
+    # All 4 views share one composite output file -- exactly one image
+    # should be attached, not four (see printlab_mcp.server's de-dupe logic).
+    assert len(result.content) == 1
+
+
+def test_render_focus_zoom_is_echoed():
+    result = _call(
+        "printlab_render",
+        {
+            "example_dir": str(EXAMPLES_DIR / "bracket"),
+            "views": ["iso"],
+            "focus_center": (0.0, 0.0, 0.0),
+            "focus_radius": 5.0,
+        },
+    )
+    assert result.is_error is False
+    assert result.structured_content["focus_center"] == [0.0, 0.0, 0.0]
+    assert result.structured_content["focus_radius"] == 5.0
+
+
+def test_render_custom_elevation_azimuth():
+    result = _call(
+        "printlab_render",
+        {"example_dir": str(EXAMPLES_DIR / "bracket"), "elevation": 15.0, "azimuth": 45.0},
+    )
+    assert result.is_error is False
+    (view,) = result.structured_content["views"]
+    assert (view["label"], view["elevation_deg"], view["azimuth_deg"]) == ("custom", 15.0, 45.0)
+
+
+def test_init_then_describe_round_trip(tmp_path):
+    (tmp_path / "part.py").write_text("def build():\n    ...\n")
+
+    init_result = _call("printlab_init", {"example_dir": str(tmp_path)})
+    assert init_result.is_error is False
+    assert (tmp_path / "printlab.toml").is_file()
+
+    describe_result = _call("printlab_describe", {"example_dir": str(tmp_path)})
+    assert describe_result.is_error is False
+    assert describe_result.structured_content["fea_configured"] is False
+    assert describe_result.structured_content["part_py"] == str(tmp_path / "part.py")
+
+
+def test_doctor_reports_repo_root():
+    result = _call("printlab_doctor", {})
+    assert result.is_error is False
+    assert "repo_root" in result.structured_content
+
+
 def test_fea_returns_structured_result():
     """Regression test: gmsh.initialize() installs a SIGINT handler by
     default, which only Python's main thread may do -- FastMCP dispatches

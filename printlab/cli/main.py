@@ -40,6 +40,19 @@ _ElevationOption = typer.Option(None, "--elevation", help="Custom camera elevati
 _AzimuthOption = typer.Option(None, "--azimuth", help="Custom camera azimuth, degrees.")
 _WidthOption = typer.Option(800, "--width")
 _HeightOption = typer.Option(600, "--height")
+_LayoutOption = typer.Option(
+    "separate",
+    "--layout",
+    help="'separate' (default, one PNG per view) or 'grid' (composite up to 4 views into one 2x2 PNG).",
+)
+_FocusCenterOption = typer.Option(
+    None,
+    "--focus-center",
+    help="Region-of-interest center X Y Z (part-native mm) to zoom into instead of framing the whole mesh.",
+)
+_FocusRadiusOption = typer.Option(
+    None, "--focus-radius", help="Half-width, mm, of the --focus-center cube; requires --focus-center."
+)
 
 
 def _resolve_output_dir(config: pipeline.PartConfig, backend: str, output: Path | None) -> Path:
@@ -105,16 +118,26 @@ def render(
     azimuth: float | None = _AzimuthOption,
     width: int = _WidthOption,
     height: int = _HeightOption,
+    layout: str = _LayoutOption,
+    focus_center: tuple[float, float, float] | None = _FocusCenterOption,
+    focus_radius: float | None = _FocusRadiusOption,
     backend: str = _BackendOption,
     output: Path | None = _OutputOption,
 ) -> None:
     """Render part.stl to PNG(s) -> render_report.json + render_*.png.
 
     Renders the `--view` presets by default; pass both `--elevation` and
-    `--azimuth` to render one custom angle instead. Not part of `printlab
-    all`. The PNGs are not hashed for reproducibility (matplotlib-version
-    dependent, like `part.stl`); only `render_report.json`'s camera metadata
-    is.
+    `--azimuth` to render one custom angle instead. Presets:
+    iso (3/4 angled), front/back (look along Y, lengthwise side profile),
+    left/right (look along X, end-on silhouettes -- not a side profile),
+    top/bottom (look along Z). `--layout grid` composites up to 4 views into
+    one 2x2 PNG instead of one file per view, at double the per-panel
+    resolution so tiling doesn't shrink detail. `--focus-center`/
+    `--focus-radius` zoom into a fixed cube instead of framing the whole
+    mesh -- useful for a small feature on an otherwise large part. Not part
+    of `printlab all`. The PNGs are not hashed for reproducibility
+    (matplotlib-version dependent, like `part.stl`); only
+    `render_report.json`'s camera metadata is.
     """
     config = pipeline.load_part_config(example_dir)
     output_dir = _resolve_output_dir(config, backend, output)
@@ -124,7 +147,16 @@ def render(
         views = [CameraView("custom", elevation, azimuth)]
     else:
         views = list(view)
-    report = pipeline.stage_render(stl_path, output_dir, views=views, width_px=width, height_px=height)
+    report = pipeline.stage_render(
+        stl_path,
+        output_dir,
+        views=views,
+        width_px=width,
+        height_px=height,
+        layout=layout,
+        focus_center=focus_center,
+        focus_radius=focus_radius,
+    )
     typer.echo(report.model_dump_json(indent=2))
 
 

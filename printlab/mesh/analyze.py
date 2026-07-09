@@ -22,7 +22,7 @@ import trimesh
 from printlab.determinism import hash_file
 from printlab.mesh.bridges import estimate_max_unsupported_span_mm
 from printlab.mesh.overhangs import DEFAULT_BUILD_DIRECTION, compute_overhangs
-from printlab.mesh.wall_thickness import estimate_min_wall_thickness_mm
+from printlab.mesh.wall_thickness import estimate_min_wall_thickness
 from printlab.schemas import ArtifactError, BBox, MeshReport, Status
 
 
@@ -98,7 +98,9 @@ def analyze(
     bbox = BBox(min=tuple(float(v) for v in bounds[0]), max=tuple(float(v) for v in bounds[1]))
 
     overhang_histogram, overhang_area_mm2 = compute_overhangs(mesh, build_direction=build_direction)
-    min_wall_thickness_mm = estimate_min_wall_thickness_mm(mesh)
+    wall_thickness = estimate_min_wall_thickness(mesh)
+    min_wall_thickness_mm = wall_thickness.value_mm if wall_thickness is not None else None
+    min_wall_thickness_location = wall_thickness.location if wall_thickness is not None else None
     max_unsupported_span_mm = estimate_max_unsupported_span_mm(mesh, build_direction=build_direction)
 
     status = Status.OK
@@ -129,6 +131,7 @@ def analyze(
         overhang_area_mm2=overhang_area_mm2,
         overhang_histogram=overhang_histogram,
         min_wall_thickness_mm=min_wall_thickness_mm,
+        min_wall_thickness_location=min_wall_thickness_location,
         max_unsupported_span_mm=max_unsupported_span_mm,
         status=status,
         errors=errors,
