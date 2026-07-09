@@ -1,0 +1,26 @@
+# Same material physics as pla.yaml -- kept as a separate profile (rather
+# than reusing pla.yaml's native_bundle) because Bambu Studio's native
+# filament JSON hard-gates on an exact `compatible_printers` machine name
+# list, and filament_generic_pla.json is locked to the A1 (non-mini) nozzle
+# variants. This is the same material paired with a filament preset whose
+# compatible_printers includes "Bambu Lab A1 mini 0.4 nozzle" instead; the
+# PrusaSlicer ini has no such per-machine gate, so it's reused unchanged.
+schema_version: "0.1.0"
+name: "Generic PLA"
+material: "PLA"
+density_g_cm3: 1.24
+nozzle_temp_c: [190.0, 220.0]
+bed_temp_c: [45.0, 60.0]
+
+young_modulus_xy_mpa: 3200.0
+young_modulus_z_mpa: 2100.0
+poisson_ratio_xy: 0.36
+poisson_ratio_xz: 0.33
+shear_modulus_xz_mpa: 850.0
+tensile_strength_xy_mpa: 55.0
+tensile_strength_z_mpa: 30.0
+
+native_bundle:
+  bambu: profiles/native/bambu/filament_generic_pla_a1_mini.json
+  prusaslicer: profiles/native/prusaslicer/filament_generic_pla.ini
+  orcaslicer: profiles/native/bambu/filament_generic_pla_a1_mini.json

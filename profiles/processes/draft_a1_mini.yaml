@@ -1,0 +1,18 @@
+# Same overridable knobs as draft.yaml -- kept as a separate profile (rather
+# than reusing draft.yaml's native_bundle) because Bambu Studio's native process
+# JSON hard-gates on an exact `compatible_printers` machine name, and
+# process_draft_0.2.json is locked to "Bambu Lab A1 0.4 nozzle". This is the
+# same process paired with the "Bambu Lab A1 mini 0.4 nozzle" machine name
+# instead; the PrusaSlicer ini has no such per-machine gate, so it's reused
+# unchanged.
+schema_version: "0.1.0"
+name: "draft"
+layer_height_mm: 0.2
+infill_percent: 15.0
+supports: false
+brim: false
+wall_count: 2
+native_bundle:
+  bambu: profiles/native/bambu/process_draft_0.2_a1_mini.json
+  prusaslicer: profiles/native/prusaslicer/process_draft_0.2.ini
+  orcaslicer: profiles/native/bambu/process_draft_0.2_a1_mini.json
