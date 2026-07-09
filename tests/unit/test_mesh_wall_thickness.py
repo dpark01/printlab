@@ -10,6 +10,7 @@ sharp-edge ray-casting artifacts).
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 import trimesh
 
@@ -72,3 +73,73 @@ def test_open_mesh_with_no_ray_hits_returns_none():
         vertices=[[0, 0, 0], [1, 0, 0], [0, 1, 0]], faces=[[0, 1, 2]], process=False
     )
     assert estimate_min_wall_thickness_mm(single_triangle) is None
+
+
+def test_congruent_shells_on_a_plate_read_like_the_single_part():
+    """Regression test for the N-up-plate dedup fix (see
+    docs/printlab-wall-thickness-scalability.md, fix #3): several disjoint
+    copies of the same part, placed far apart on one plate, should read the
+    same thickness as the lone part -- congruent shells broadcast a cached
+    result rather than independently re-sampling."""
+    box = trimesh.creation.box(extents=(50.0, 50.0, 2.0))
+    solo_thickness = estimate_min_wall_thickness_mm(box)
+
+    copies = []
+    for i in range(5):
+        copy = box.copy()
+        copy.apply_translation((i * 200.0, 0.0, 0.0))  # far apart: no bbox overlap
+        copies.append(copy)
+    plate = trimesh.util.concatenate(copies)
+
+    plate_thickness = estimate_min_wall_thickness_mm(plate)
+    assert plate_thickness == pytest.approx(solo_thickness)
+
+
+def test_a_shell_reads_the_same_thickness_regardless_of_its_neighbor():
+    """Regression test for the cross-shell ray-leak fix (fix #1): a shell's
+    own reading must not depend on what else shares the plate -- each shell
+    is ray-cast against its own BVH only."""
+    slab = trimesh.creation.box(extents=(50.0, 50.0, 2.0))
+    solo_thickness = estimate_min_wall_thickness_mm(slab)
+
+    neighbor = trimesh.creation.box(extents=(20.0, 20.0, 20.0))
+    neighbor.apply_translation((100.0, 0.0, 0.0))
+    plate = trimesh.util.concatenate([slab, neighbor])
+
+    plate_result = estimate_min_wall_thickness(plate)
+    assert plate_result is not None
+    # The slab's reading must be unperturbed by sharing a plate with a much
+    # thicker neighbor a fixed distance away.
+    assert plate_result.value_mm == pytest.approx(solo_thickness, abs=0.3)
+
+
+def test_sampling_below_a_low_face_cap_is_bounded_and_deterministic():
+    """Regression test for the capped-sample fix (fix #2): forcing a tiny
+    per-shell face budget on a high-poly part must not crash, must still
+    reject the sharp-edge artifact (see
+    test_a_single_sharp_edge_artifact_does_not_dominate_a_larger_part above),
+    and must be reproducible across repeated calls."""
+    cylinder = trimesh.creation.cylinder(radius=6.0, height=30.0, sections=256)
+    assert len(cylinder.faces) > 500
+
+    first = estimate_min_wall_thickness_mm(cylinder, max_sampled_faces_per_shell=100)
+    second = estimate_min_wall_thickness_mm(cylinder, max_sampled_faces_per_shell=100)
+    assert first is not None
+    assert first == second
+    assert first > 8.0  # true diameter is 12mm; a buggy version read ~4.6mm
+
+
+def test_degenerate_zero_area_face_is_excluded_not_fatal():
+    """Regression test for the NaN-normal robustness gap (a zero-area face's
+    normal can't be normalized -- a 0/0 division -- which previously
+    propagated into ray directions and crashed the ray-mesh intersector
+    outright instead of just being skipped)."""
+    box = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
+    vertices = np.vstack([box.vertices, [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [2.0, 0.0, 0.0]]])
+    faces = np.vstack([box.faces, [[8, 9, 10]]])  # zero-area (collinear) triangle
+    mesh_with_degenerate_face = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+
+    result = estimate_min_wall_thickness(mesh_with_degenerate_face)
+    assert result is not None
+    assert np.isfinite(result.value_mm)
+    assert result.value_mm == pytest.approx(10.0, abs=0.5)
