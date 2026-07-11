@@ -4,9 +4,12 @@ Orchestration only -- the real work lives in the sibling modules, split so the
 pure-Python deck/parse logic (deck.py) stays testable without the native
 solver, and the gmsh/ccx-dependent pieces (mesh.py, solve.py) are isolated:
 
-    mesh.py   STEP -> linear-tet nodes/elements (Gmsh)
-    deck.py   nodes/elements + load case + material -> CalculiX .inp / parse .frd
-    solve.py  find and run ccx
+    mesh.py        STEP -> linear-tet nodes/elements (Gmsh), in-process
+    mesh_runner.py runs mesh.py's mesh_step() in an isolated subprocess (see
+                   its docstring for why: a Gmsh-level failure must not be
+                   able to kill the caller, e.g. the MCP server)
+    deck.py        nodes/elements + load case + material -> CalculiX .inp / parse .frd
+    solve.py       find and run ccx
 
 The default boundary condition fixes the nodes resting on the print bed, since
 a printed part is physically held there by bed adhesion. This is a crude
@@ -38,16 +41,20 @@ def analyze(
 ) -> FEAReport:
     """Run a linear-static FEA of `step_path` under `load_case` and return an
     FEAReport. Requires the `fea` extra (gmsh) and `ccx` on PATH; raises if the
-    solver is missing or the run produces no result file."""
-    # Imported here, not at module top: meshing needs the optional `gmsh`
-    # dependency, but deck writing / .frd parsing (printlab.fea.deck) must stay
-    # importable and unit-testable without the `fea` extra installed.
-    from printlab.fea import mesh as mesh_mod
+    solver is missing or the run produces no result file.
+
+    Meshing runs in an isolated subprocess (printlab.fea.mesh_runner) rather
+    than in-process, so a Gmsh-level meshing failure can only kill that child,
+    not the caller -- see mesh_runner's docstring and issue #4.
+    """
+    from printlab.fea import mesh_runner
 
     step_path = Path(step_path)
     input_sha256 = hash_file(step_path)
 
-    nodes, elements = mesh_mod.mesh_step(step_path)
+    nodes, elements, _resolved_mesh_size_mm = mesh_runner.run_mesh_worker(
+        step_path, mesh_size_mm=load_case.mesh_size_mm
+    )
     inp = deck_mod.build_inp(
         nodes,
         elements,

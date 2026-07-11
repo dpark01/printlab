@@ -34,16 +34,51 @@ already produces instead of adding a new CAD export.
 ## The pipeline
 
 ```
-part.step -> Gmsh (linear tets)         printlab/fea/mesh.py   (needs the `fea` extra)
-          -> CalculiX .inp deck         printlab/fea/deck.py   (pure Python)
-          -> ccx solve                  printlab/fea/solve.py  (needs `ccx` on PATH)
+part.step -> Gmsh (linear tets)         printlab/fea/mesh.py         (needs the `fea` extra)
+             via an isolated subprocess printlab/fea/mesh_runner.py  (spawns _mesh_worker.py)
+          -> CalculiX .inp deck         printlab/fea/deck.py         (pure Python)
+          -> ccx solve                  printlab/fea/solve.py       (needs `ccx` on PATH)
           -> .frd parse -> FEAReport    printlab/fea/deck.py
 ```
 
 Split so the parts that don't need native tools stay unit-testable:
 `deck.py` (deck writing + `.frd` parsing) is pure Python and tested against a
 real captured `ccx` output fixture (`tests/fixtures/fea/sample.frd`); only
-`mesh.py` needs `gmsh` and only `solve.py` needs `ccx`.
+`mesh.py` needs `gmsh` and only `solve.py` needs `ccx`. `mesh_runner.py`
+itself needs neither -- it only shells out to `python -m
+printlab.fea._mesh_worker`, mirroring `solve.py`'s `run_ccx()` subprocess
+convention (list-form args, no shell, explicit timeout).
+
+**Meshing runs in a subprocess, not in-process.** `printlab.fea.analyze()`
+used to call `mesh.py`'s `mesh_step()` directly. Gmsh's Python API installs a
+SIGINT handler on `gmsh.initialize()` by default, which only works on the
+main thread -- but FastMCP dispatches `printlab_fea` off-thread, so `mesh.py`
+already had to pass `interruptible=False` to avoid an immediate crash on
+that call alone. That workaround didn't cover the actual failure mode: on a
+part combining a large overall footprint with fine local features (e.g. a
+0.35mm hinge gap next to a 78mm box), the default characteristic mesh size
+(~1/20 of the bounding-box diagonal) is far coarser than the fine feature,
+Gmsh raises `Invalid boundary mesh (overlapping facets)`, and that failure --
+happening on the FastMCP worker thread -- was observed to kill the whole MCP
+server process, with every subsequent tool call failing until the client
+reconnected. `mesh_runner.run_mesh_worker()` now runs the actual meshing in a
+child process (`python -m printlab.fea._mesh_worker`); a Gmsh-level failure
+there, on whatever thread it occurs, can only kill that child and surfaces
+to the caller as an ordinary `RuntimeError` with the failure's stderr tail.
+This subprocess boundary produces numerically identical results to the old
+in-process call (same Gmsh version, same inputs) -- see
+`tests/integration/test_fea_hook.py`, unchanged by this refactor.
+
+**`mesh_size_mm` overrides the default sizing.** `FEALoadCase.mesh_size_mm`
+(optional, `printlab.toml`'s `[fea]` table) is threaded straight through to
+`mesh_step()`, for exactly the large-footprint/fine-feature case above where
+the default heuristic is too coarse. Left unset, the ~diagonal/20 default is
+unchanged. `printlab_fea_preview` (`printlab fea-preview` on the CLI) is a
+cheap, `ccx`-free way to try a candidate `mesh_size_mm` before a real
+`printlab_fea` run: it meshes (in the same isolated subprocess) and reports
+node/element counts, or a structured `status="error"` on failure -- never a
+crash -- so tuning `mesh_size_mm` for an unfamiliar part doesn't require
+risking a full FEA round trip.
 
 **Linux system dependency, easy to miss:** `pip install`/`uv sync --extra
 fea` alone is not enough on Linux. `gmsh`'s compiled extension `dlopen()`s
@@ -70,6 +105,7 @@ load_point_mm = [0.0, 34.0, 28.0]   # a point in the part's STEP/STL frame
 load_force_n = [0.0, 0.0, -10.0]    # applied force vector, newtons
 load_region_radius_mm = 4.0         # distribute the load over nodes within this radius (optional, default 2.0)
 # fixed_region omitted -> "bed_contact" default (see below)
+# mesh_size_mm omitted -> ~1/20 of the bounding-box diagonal (optional override; see "The pipeline" above)
 ```
 
 `fixed_region` defaults to `"bed_contact"`: every mesh node resting on the

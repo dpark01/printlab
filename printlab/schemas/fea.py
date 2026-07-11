@@ -38,6 +38,12 @@ class FEALoadCase(BaseModel):
     distributes it evenly over every mesh node within `load_region_radius_mm`
     of that point (falling back to the single nearest node if none are in
     range).
+
+    `mesh_size_mm` overrides printlab.fea.mesh.mesh_step's default characteristic
+    element size (~1/20 of the part's bounding-box diagonal), which is too
+    coarse for a part combining a large overall footprint with fine local
+    features (a thin hinge/latch next to a full-size box) -- see issue #4. Left
+    `None`, the diagonal-based default is used, unchanged from v1.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -48,6 +54,7 @@ class FEALoadCase(BaseModel):
     load_point_mm: tuple[float, float, float]
     load_force_n: tuple[float, float, float]
     load_region_radius_mm: float = 2.0
+    mesh_size_mm: float | None = None
 
 
 class FEAReport(PrintLabArtifact):
@@ -73,3 +80,26 @@ class FEAReport(PrintLabArtifact):
     max_displacement_mm: float
     max_von_mises_stress_mpa: float
     safety_factor: float | None = None
+
+
+class FEAMeshPreviewReport(PrintLabArtifact):
+    """printlab.fea.mesh_runner-backed pre-flight -> fea_mesh_preview.json.
+
+    A cheap, `ccx`-free check of whether `mesh_size_mm` (or the default
+    diagonal-based heuristic) can mesh a part's geometry at all, without
+    running a full FEA -- see issue #5's request for a dry-run ahead of
+    `printlab_fea`, now that a bad mesh is a known failure mode (issue #4).
+    Meshing still runs in the same isolated subprocess as a real FEA run, so a
+    Gmsh-level failure here comes back as `status="error"` with a structured
+    `errors[]` entry, never an exception -- `mesh_node_count`/
+    `mesh_element_count` are `None` in that case.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    input_path: Path
+    input_sha256: str
+    mesh_size_mm: float | None = None
+    resolved_mesh_size_mm: float | None = None
+    mesh_node_count: int | None = None
+    mesh_element_count: int | None = None

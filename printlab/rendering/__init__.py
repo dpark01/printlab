@@ -44,6 +44,7 @@ def render(
     layout: Literal["separate", "grid"] = "separate",
     focus_center: tuple[float, float, float] | None = None,
     focus_radius: float | None = None,
+    rebuilt: bool = False,
 ) -> RenderReport:
     """Load an STL and render it from each requested view.
 
@@ -54,6 +55,9 @@ def render(
     into one PNG instead of one file per view (see `render_views`).
     `focus_center`/`focus_radius` zoom into a fixed region instead of framing
     the whole mesh -- useful for a small feature on an otherwise large part.
+    `rebuilt` is purely descriptive passthrough (see RenderReport.rebuilt) --
+    this function never decides whether to build, only whether to report that
+    one happened.
     """
     stl_path = Path(stl_path)
     input_sha256 = hash_file(stl_path)
@@ -78,6 +82,7 @@ def render(
         layout=layout,
         focus_center=focus_center,
         focus_radius=focus_radius,
+        rebuilt=rebuilt,
     )
 
 

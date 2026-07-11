@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "ArtifactError": {
+      "additionalProperties": false,
+      "description": "A single structured failure, so an agent can branch without parsing prose.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "context": {
+          "additionalProperties": true,
+          "title": "Context",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "stage"
+      ],
+      "title": "ArtifactError",
+      "type": "object"
+    },
+    "ExportedFile": {
+      "additionalProperties": false,
+      "properties": {
+        "dest": {
+          "format": "path",
+          "title": "Dest",
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "stl",
+            "step",
+            "3mf",
+            "gcode",
+            "render"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "source": {
+          "format": "path",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "format",
+        "source",
+        "dest"
+      ],
+      "title": "ExportedFile",
+      "type": "object"
+    },
+    "Status": {
+      "description": "Outcome of a stage, or of a single evaluation check.",
+      "enum": [
+        "ok",
+        "warning",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "printlab_export(...) -> what was actually copied.\n\nA requested format whose source artifact doesn't exist yet (e.g. `gcode`\nwithout a prior `printlab_all`, `render` without a prior `printlab_render`)\nis recorded as a `warning`-status `errors[]` entry, not a hard failure --\nthe other requested formats still get copied.",
+  "properties": {
+    "backend": {
+      "title": "Backend",
+      "type": "string"
+    },
+    "dest_dir": {
+      "format": "path",
+      "title": "Dest Dir",
+      "type": "string"
+    },
+    "errors": {
+      "items": {
+        "$ref": "#/$defs/ArtifactError"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "example_dir": {
+      "format": "path",
+      "title": "Example Dir",
+      "type": "string"
+    },
+    "exported": {
+      "items": {
+        "$ref": "#/$defs/ExportedFile"
+      },
+      "title": "Exported",
+      "type": "array"
+    },
+    "name_prefix": {
+      "title": "Name Prefix",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/Status",
+      "default": "ok"
+    }
+  },
+  "required": [
+    "example_dir",
+    "backend",
+    "dest_dir",
+    "name_prefix"
+  ],
+  "title": "ExportReport",
+  "type": "object"
+}

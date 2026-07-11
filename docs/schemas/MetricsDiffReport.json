@@ -1,0 +1,196 @@
+{
+  "$defs": {
+    "ArtifactError": {
+      "additionalProperties": false,
+      "description": "A single structured failure, so an agent can branch without parsing prose.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "context": {
+          "additionalProperties": true,
+          "title": "Context",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "stage"
+      ],
+      "title": "ArtifactError",
+      "type": "object"
+    },
+    "CheckStatusChange": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status_a": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status_b": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Status"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "status_a",
+        "status_b"
+      ],
+      "title": "CheckStatusChange",
+      "type": "object"
+    },
+    "MetricDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "delta": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Delta"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "value_a": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value A"
+        },
+        "value_b": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value B"
+        }
+      },
+      "required": [
+        "metric",
+        "value_a",
+        "value_b"
+      ],
+      "title": "MetricDelta",
+      "type": "object"
+    },
+    "Status": {
+      "description": "Outcome of a stage, or of a single evaluation check.",
+      "enum": [
+        "ok",
+        "warning",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "printlab_diff(report_a, report_b) -> what changed between two\nprintability_report.json runs.\n\n`metric_deltas` covers `metrics{}` keys present in either report whose\nvalue differs; `check_changes` covers `checks[]` entries (matched by\n`name`) whose `status` differs, including a check appearing in only one\nreport (the missing side is `None`).",
+  "properties": {
+    "check_changes": {
+      "items": {
+        "$ref": "#/$defs/CheckStatusChange"
+      },
+      "title": "Check Changes",
+      "type": "array"
+    },
+    "errors": {
+      "items": {
+        "$ref": "#/$defs/ArtifactError"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "metric_deltas": {
+      "items": {
+        "$ref": "#/$defs/MetricDelta"
+      },
+      "title": "Metric Deltas",
+      "type": "array"
+    },
+    "report_a": {
+      "title": "Report A",
+      "type": "string"
+    },
+    "report_b": {
+      "title": "Report B",
+      "type": "string"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/Status",
+      "default": "ok"
+    }
+  },
+  "required": [
+    "report_a",
+    "report_b"
+  ],
+  "title": "MetricsDiffReport",
+  "type": "object"
+}

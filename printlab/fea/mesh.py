@@ -22,13 +22,17 @@ import numpy as np
 _GMSH_TET4 = 4
 
 
-def mesh_step(step_path: Path, *, mesh_size_mm: float | None = None) -> tuple[np.ndarray, np.ndarray]:
-    """Mesh `step_path` into linear tets. Returns (nodes, elements).
+def mesh_step(
+    step_path: Path, *, mesh_size_mm: float | None = None
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Mesh `step_path` into linear tets. Returns (nodes, elements, resolved_mesh_size_mm).
 
     `nodes` is (N,3) float mm; `elements` is (M,4) int, 0-indexed into `nodes`.
     If `mesh_size_mm` is None a characteristic size of ~1/20 of the bounding-box
     diagonal is used, a compromise between element count and solve time for a
-    crude v1 analysis.
+    crude v1 analysis; `resolved_mesh_size_mm` echoes back whichever size (given
+    or defaulted) was actually handed to Gmsh, so a caller passing `None` can
+    still learn/report what ran.
     """
     step_path = Path(step_path)
 
@@ -78,7 +82,7 @@ def mesh_step(step_path: Path, *, mesh_size_mm: float | None = None) -> tuple[np
         if tet_conn is None:
             raise RuntimeError(f"Gmsh produced no linear tetrahedra for {step_path}")
 
-        return nodes, tet_conn.astype(np.int64)
+        return nodes, tet_conn.astype(np.int64), float(mesh_size_mm)
     finally:
         if initialized_here:
             gmsh.finalize()
