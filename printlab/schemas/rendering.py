@@ -76,3 +76,14 @@ class RenderReport(PrintLabArtifact):
         default=None,
         description="Half-width (mm) of the focus_center cube; None means no zoom override was applied.",
     )
+    rebuilt: bool = Field(
+        default=False,
+        description=(
+            "Whether the CAD source was rebuilt (part.stl/part.step regenerated) as part of "
+            "producing this render, vs. reusing an already-built output/<backend>/ -- see "
+            "printlab.pipeline.build_is_fresh. False does not mean 'stale': it means an already-"
+            "fresh build was reused. Only meaningful for the MCP/CLI render path, which can build "
+            "on demand (printlab_mcp.tools.ensure_built); a bare printlab.rendering.render() call "
+            "against an arbitrary STL always leaves this at the default."
+        ),
+    )

@@ -32,7 +32,7 @@
     },
     "FEALoadCase": {
       "additionalProperties": false,
-      "description": "One static load case: where the part is held, and one applied force.\n\n`fixed_region` defaults to \"bed_contact\" -- the nodes resting on the print\nbed are fully constrained, matching how a printed part is physically held\nby bed adhesion at its base. The alternative (an explicit min/max box in mm)\nis an override path for a future non-bed-fixed case; v1's real usage is\nalways the default.\n\nThe load is a single force vector (`load_force_n`, in newtons) applied at\n`load_point_mm`. To avoid a stress singularity at one node, printlab.fea\ndistributes it evenly over every mesh node within `load_region_radius_mm`\nof that point (falling back to the single nearest node if none are in\nrange).",
+      "description": "One static load case: where the part is held, and one applied force.\n\n`fixed_region` defaults to \"bed_contact\" -- the nodes resting on the print\nbed are fully constrained, matching how a printed part is physically held\nby bed adhesion at its base. The alternative (an explicit min/max box in mm)\nis an override path for a future non-bed-fixed case; v1's real usage is\nalways the default.\n\nThe load is a single force vector (`load_force_n`, in newtons) applied at\n`load_point_mm`. To avoid a stress singularity at one node, printlab.fea\ndistributes it evenly over every mesh node within `load_region_radius_mm`\nof that point (falling back to the single nearest node if none are in\nrange).\n\n`mesh_size_mm` overrides printlab.fea.mesh.mesh_step's default characteristic\nelement size (~1/20 of the part's bounding-box diagonal), which is too\ncoarse for a part combining a large overall footprint with fine local\nfeatures (a thin hinge/latch next to a full-size box) -- see issue #4. Left\n`None`, the diagonal-based default is used, unchanged from v1.",
       "properties": {
         "fixed_region": {
           "anyOf": [
@@ -121,6 +121,18 @@
           "default": 2.0,
           "title": "Load Region Radius Mm",
           "type": "number"
+        },
+        "mesh_size_mm": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mesh Size Mm"
         }
       },
       "required": [

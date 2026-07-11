@@ -11,20 +11,23 @@ upstream artifact back from `output_dir`.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import tomllib
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
 
 from printlab.cad import build_part, export_step, export_stl
-from printlab.determinism import hash_artifact
+from printlab.cad.probe import classify_points, load_solid
+from printlab.determinism import hash_artifact, hash_file
 from printlab.evaluation import evaluate as evaluate_printability
 from printlab.fea import analyze as analyze_fea
+from printlab.fea import mesh_runner as fea_mesh_runner
 from printlab.gcode import analyze as analyze_gcode
 from printlab.mesh import analyze as analyze_mesh
 from printlab.mesh import orient as search_orientation
@@ -36,6 +39,7 @@ from printlab.rendering import render as render_part
 from printlab.reporting import render_html, render_markdown
 from printlab.schemas import (
     FEALoadCase,
+    FEAMeshPreviewReport,
     FEAReport,
     GCodeReport,
     MaterialProfile,
@@ -44,23 +48,29 @@ from printlab.schemas import (
     OrientationSearchReport,
     PrintabilityReport,
     PrinterProfile,
+    ProbedPoint,
+    ProbeReport,
     ProcessProfile,
     RenderReport,
     RunManifest,
     SliceRequest,
     SliceResult,
 )
+from printlab.schemas.common import ArtifactError, Status
 from printlab.slicing import get_backend
 
 ARTIFACT_FILENAMES = {
     "step": "part.step",
     "stl": "part.stl",
+    "build_fingerprint": ".build_fingerprint.json",
     "mesh_report": "mesh_report.json",
     "mesh_repair_report": "mesh_repair_report.json",
     "stl_repaired": "part_repaired.stl",
     "orientation_search_report": "orientation_search_report.json",
     "render_report": "render_report.json",
     "fea_report": "fea_report.json",
+    "fea_mesh_preview_report": "fea_mesh_preview.json",
+    "probe_report": "probe_report.json",
     "slice_result": "slice_result.json",
     "gcode_report": "gcode_report.json",
     "printability_report": "printability_report.json",
@@ -159,6 +169,13 @@ def _write_json_atomic(path: Path, model: BaseModel) -> None:
     os.replace(tmp_path, path)
 
 
+def _write_json_atomic_raw(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(path.name + ".tmp")
+    tmp_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    os.replace(tmp_path, path)
+
+
 def read_json_artifact(path: Path, model_cls: type[BaseModel]) -> BaseModel:
     """Read a previously-written artifact back, for independently-run stages."""
     if not path.is_file():
@@ -174,10 +191,40 @@ def load_profiles(config: PartConfig) -> tuple[PrinterProfile, MaterialProfile, 
     )
 
 
+def _build_fingerprint(config: PartConfig) -> dict:
+    return {
+        "cad_source_sha256": hash_file(config.part_py),
+        "build_function": config.build_function,
+        "part_py": str(config.part_py),
+    }
+
+
+def build_is_fresh(config: PartConfig, output_dir: Path) -> bool:
+    """Whether `output_dir` already holds a build that matches `config`'s
+    current CAD source content and build function -- i.e. whether a caller can
+    reuse it instead of re-running `stage_build`.
+
+    Backs printlab_mcp.tools.ensure_built's rebuild decision (issue #5.1: it
+    used to check only whether `part.stl` existed, so an edited `part.py` or a
+    `[part].function` switch could silently reuse a stale build). Missing or
+    unreadable fingerprint, or a missing CAD source file, counts as not fresh
+    (forces a rebuild rather than risking a false "fresh").
+    """
+    fingerprint_path = Path(output_dir) / ARTIFACT_FILENAMES["build_fingerprint"]
+    if not fingerprint_path.is_file() or not config.part_py.is_file():
+        return False
+    try:
+        recorded = json.loads(fingerprint_path.read_text())
+    except json.JSONDecodeError:
+        return False
+    return recorded == _build_fingerprint(config)
+
+
 def stage_build(config: PartConfig, output_dir: Path) -> tuple[Path, Path]:
     result = build_part(config.part_py, config.build_function)
     step_path = export_step(result, output_dir / ARTIFACT_FILENAMES["step"])
     stl_path = export_stl(result, output_dir / ARTIFACT_FILENAMES["stl"])
+    _write_json_atomic_raw(output_dir / ARTIFACT_FILENAMES["build_fingerprint"], _build_fingerprint(config))
     return step_path, stl_path
 
 
@@ -219,13 +266,16 @@ def stage_render(
     layout: Literal["separate", "grid"] = "separate",
     focus_center: tuple[float, float, float] | None = None,
     focus_radius: float | None = None,
+    rebuilt: bool = False,
 ) -> RenderReport:
     """Not part of `run_all()`'s critical path (like stage_repair/
     stage_orientation_search): an explicit, image-producing capability. The
     PNGs themselves are not part of the reproducibility contract -- only this
     JSON's camera metadata is (see printlab.schemas.rendering). `layout="grid"`
     tiles up to 4 views into one composited PNG; `focus_center`/`focus_radius`
-    zoom into a fixed region instead of framing the whole mesh.
+    zoom into a fixed region instead of framing the whole mesh. `rebuilt`
+    records whether the caller rebuilt the CAD source for this render (see
+    RenderReport.rebuilt) -- purely descriptive, not acted on here.
     """
     report = render_part(
         stl_path,
@@ -236,6 +286,7 @@ def stage_render(
         layout=layout,
         focus_center=focus_center,
         focus_radius=focus_radius,
+        rebuilt=rebuilt,
     )
     _write_json_atomic(output_dir / ARTIFACT_FILENAMES["render_report"], report)
     return report
@@ -259,6 +310,73 @@ def stage_fea(
     except (FileNotFoundError, RuntimeError, ModuleNotFoundError) as exc:
         raise PipelineError(f"FEA failed: {exc}") from exc
     _write_json_atomic(output_dir / ARTIFACT_FILENAMES["fea_report"], report)
+    return report
+
+
+def stage_fea_preview(
+    step_path: Path, output_dir: Path, *, mesh_size_mm: float | None = None
+) -> FEAMeshPreviewReport:
+    """Mesh-only, `ccx`-free pre-flight ahead of `stage_fea` (issue #5.2): can
+    `mesh_size_mm` (or the diagonal-based default) mesh this part's geometry at
+    all? Meshing runs in the same isolated subprocess as a real FEA run (see
+    printlab.fea.mesh_runner), so a Gmsh-level failure comes back as a
+    `status="error"` report with a structured `errors[]` entry -- never an
+    exception -- making this safe to try before a real `printlab_fea` call on
+    an unfamiliar part.
+    """
+    step_path = Path(step_path)
+    input_sha256 = hash_file(step_path)
+    try:
+        _nodes, elements, resolved_mesh_size_mm = fea_mesh_runner.run_mesh_worker(
+            step_path, mesh_size_mm=mesh_size_mm
+        )
+    except (RuntimeError, ModuleNotFoundError) as exc:
+        report = FEAMeshPreviewReport(
+            status=Status.ERROR,
+            errors=[ArtifactError(code="mesh_failed", message=str(exc), stage="fea_preview")],
+            input_path=step_path,
+            input_sha256=input_sha256,
+            mesh_size_mm=mesh_size_mm,
+        )
+        _write_json_atomic(output_dir / ARTIFACT_FILENAMES["fea_mesh_preview_report"], report)
+        return report
+
+    report = FEAMeshPreviewReport(
+        input_path=step_path,
+        input_sha256=input_sha256,
+        mesh_size_mm=mesh_size_mm,
+        resolved_mesh_size_mm=resolved_mesh_size_mm,
+        mesh_node_count=int(_nodes.shape[0]),
+        mesh_element_count=int(elements.shape[0]),
+    )
+    _write_json_atomic(output_dir / ARTIFACT_FILENAMES["fea_mesh_preview_report"], report)
+    return report
+
+
+def stage_probe(
+    step_path: Path, output_dir: Path, *, points: Sequence[tuple[float, float, float]], tolerance_mm: float
+) -> ProbeReport:
+    """Classify each of `points` as "IN"/"OUT"/"ON" the built solid (issue
+    #5.3): brings the ad hoc "is this point inside the built solid" scripting
+    pattern into a structured, deterministic report. Reads `step_path` back
+    from disk (the exact B-rep, not the tessellated STL) rather than
+    rebuilding, matching every other independently-executable stage's
+    convention of reading its upstream artifact.
+    """
+    step_path = Path(step_path)
+    input_sha256 = hash_file(step_path)
+    shape = load_solid(step_path)
+    classifications = classify_points(shape, list(points), tolerance_mm=tolerance_mm)
+    report = ProbeReport(
+        input_path=step_path,
+        input_sha256=input_sha256,
+        tolerance_mm=tolerance_mm,
+        points=[
+            ProbedPoint(point_mm=point, classification=classification)
+            for point, classification in zip(points, classifications, strict=True)
+        ],
+    )
+    _write_json_atomic(output_dir / ARTIFACT_FILENAMES["probe_report"], report)
     return report
 
 
@@ -338,9 +456,22 @@ def stage_report(
     return report_path
 
 
-def run_all(example_dir: Path, backend_name: str, *, output_dir: Path | None = None) -> dict:
-    """Run every stage in order and return the in-memory artifacts + manifest."""
+def run_all(
+    example_dir: Path,
+    backend_name: str,
+    *,
+    output_dir: Path | None = None,
+    build_function: str | None = None,
+) -> dict:
+    """Run every stage in order and return the in-memory artifacts + manifest.
+
+    `build_function` overrides printlab.toml's `[part].function` for this call
+    only (issue #5.4) -- e.g. to check an alternate builder in the same CAD
+    module without editing the config file back and forth.
+    """
     config = load_part_config(example_dir)
+    if build_function is not None:
+        config = replace(config, build_function=build_function)
     output_dir = Path(output_dir) if output_dir else default_output_dir(config, backend_name)
     prepare_output_dir(output_dir, clean=True)
 
@@ -407,7 +538,9 @@ def run_all(example_dir: Path, backend_name: str, *, output_dir: Path | None = N
     }
 
 
-def run_check(example_dir: Path, *, output_dir: Path | None = None) -> dict:
+def run_check(
+    example_dir: Path, *, output_dir: Path | None = None, build_function: str | None = None
+) -> dict:
     """Run build -> mesh -> evaluate -> report with slicing skipped entirely.
 
     Distinct from `run_all()`, which keeps its full-fidelity contract and
@@ -416,8 +549,13 @@ def run_check(example_dir: Path, *, output_dir: Path | None = None) -> dict:
     the "the core doesn't need a slicer" path (see docs/environment.md).
     Slicer-derived metrics (filament mass, print time, layer count) come back
     `None` -- see printlab.evaluation.printability.
+
+    `build_function` overrides printlab.toml's `[part].function` for this call
+    only -- see run_all's matching parameter (issue #5.4).
     """
     config = load_part_config(example_dir)
+    if build_function is not None:
+        config = replace(config, build_function=build_function)
     output_dir = Path(output_dir) if output_dir else default_output_dir(config, "check")
     prepare_output_dir(output_dir, clean=True)
 

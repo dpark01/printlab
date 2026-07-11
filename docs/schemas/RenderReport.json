@@ -155,6 +155,12 @@
       "title": "Layout",
       "type": "string"
     },
+    "rebuilt": {
+      "default": false,
+      "description": "Whether the CAD source was rebuilt (part.stl/part.step regenerated) as part of producing this render, vs. reusing an already-built output/<backend>/ -- see printlab.pipeline.build_is_fresh. False does not mean 'stale': it means an already-fresh build was reused. Only meaningful for the MCP/CLI render path, which can build on demand (printlab_mcp.tools.ensure_built); a bare printlab.rendering.render() call against an arbitrary STL always leaves this at the default.",
+      "title": "Rebuilt",
+      "type": "boolean"
+    },
     "schema_version": {
       "default": "0.1.0",
       "title": "Schema Version",

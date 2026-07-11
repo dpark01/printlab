@@ -1,0 +1,127 @@
+{
+  "$defs": {
+    "ArtifactError": {
+      "additionalProperties": false,
+      "description": "A single structured failure, so an agent can branch without parsing prose.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "context": {
+          "additionalProperties": true,
+          "title": "Context",
+          "type": "object"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "stage"
+      ],
+      "title": "ArtifactError",
+      "type": "object"
+    },
+    "Status": {
+      "description": "Outcome of a stage, or of a single evaluation check.",
+      "enum": [
+        "ok",
+        "warning",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "printlab.fea.mesh_runner-backed pre-flight -> fea_mesh_preview.json.\n\nA cheap, `ccx`-free check of whether `mesh_size_mm` (or the default\ndiagonal-based heuristic) can mesh a part's geometry at all, without\nrunning a full FEA -- see issue #5's request for a dry-run ahead of\n`printlab_fea`, now that a bad mesh is a known failure mode (issue #4).\nMeshing still runs in the same isolated subprocess as a real FEA run, so a\nGmsh-level failure here comes back as `status=\"error\"` with a structured\n`errors[]` entry, never an exception -- `mesh_node_count`/\n`mesh_element_count` are `None` in that case.",
+  "properties": {
+    "errors": {
+      "items": {
+        "$ref": "#/$defs/ArtifactError"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "input_path": {
+      "format": "path",
+      "title": "Input Path",
+      "type": "string"
+    },
+    "input_sha256": {
+      "title": "Input Sha256",
+      "type": "string"
+    },
+    "mesh_element_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mesh Element Count"
+    },
+    "mesh_node_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mesh Node Count"
+    },
+    "mesh_size_mm": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mesh Size Mm"
+    },
+    "resolved_mesh_size_mm": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Resolved Mesh Size Mm"
+    },
+    "schema_version": {
+      "default": "0.1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/Status",
+      "default": "ok"
+    }
+  },
+  "required": [
+    "input_path",
+    "input_sha256"
+  ],
+  "title": "FEAMeshPreviewReport",
+  "type": "object"
+}

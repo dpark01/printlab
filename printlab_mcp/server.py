@@ -19,7 +19,15 @@ from fastmcp.utilities.types import Image
 
 from printlab import pipeline
 from printlab.cad import PartBuildError
-from printlab.schemas import FEAReport, OrientationSearchReport, PrintabilityReport
+from printlab.schemas import (
+    ExportReport,
+    FEAMeshPreviewReport,
+    FEAReport,
+    OrientationSearchReport,
+    PrintabilityReport,
+)
+from printlab.schemas.diff import MetricsDiffReport
+from printlab.schemas.probe import ProbeReport
 from printlab_mcp import tools
 
 mcp = FastMCP(
@@ -31,18 +39,23 @@ mcp = FastMCP(
         "`provisional_score` is UNCALIBRATED (`score_calibrated` is false in v1) -- "
         "never optimize it; reason about `checks[]`/`metrics{}` instead. Always rerun "
         "after a CAD-source edit before drawing a conclusion, and compare metrics "
-        "numerically across runs, not visually. `output/<backend>/` is fully "
-        "disposable -- every run against a backend wipes and regenerates it; never "
-        "hand-edit anything under it. printlab_check needs no slicer; printlab_all "
-        "requires an installed backend (query printlab_doctor first). 'check' is a "
-        "no-slicer sentinel accepted by `backend` parameters, not a real backend "
-        "name. No printlab.toml in a target directory? Call printlab_init to "
-        "scaffold one, or printlab_describe to inspect an existing one without "
-        "building anything. Try printlab_orient before manually second-guessing a "
-        "part's build orientation. Prefer a bounded iterate-then-recheck loop (edit "
-        "CAD source -> printlab_check/printlab_all -> compare -> repeat until no "
-        "ERROR-level check remains and the target metric stops improving) over an "
-        "open-ended edit/rerun cycle."
+        "numerically across runs with printlab_diff rather than by eye. "
+        "`output/<backend>/` is fully disposable -- every run against a backend wipes "
+        "and regenerates it; never hand-edit anything under it. printlab_check needs "
+        "no slicer; printlab_all requires an installed backend (query printlab_doctor "
+        "first). 'check' is a no-slicer sentinel accepted by `backend` parameters, not "
+        "a real backend name. No printlab.toml in a target directory? Call "
+        "printlab_init to scaffold one, or printlab_describe to inspect an existing "
+        "one without building anything. Try printlab_orient before manually "
+        "second-guessing a part's build orientation. Before a real printlab_fea call "
+        "on an unfamiliar part, consider printlab_fea_preview first -- it meshes "
+        "without running the solver, so a bad mesh sizing shows up as a clean error "
+        "report rather than the (now-fixed) risk of a crashed run. `function` on "
+        "check/all/render/fea/orient/fea_preview/probe overrides printlab.toml's "
+        "[part].function for that one call, without editing the file. Prefer a "
+        "bounded iterate-then-recheck loop (edit CAD source -> printlab_check/"
+        "printlab_all -> compare -> repeat until no ERROR-level check remains and the "
+        "target metric stops improving) over an open-ended edit/rerun cycle."
     ),
 )
 
@@ -56,32 +69,39 @@ def _translate_errors():
 
 
 @mcp.tool
-def printlab_check(example_dir: str, output_dir: str | None = None) -> PrintabilityReport:
+def printlab_check(
+    example_dir: str, output_dir: str | None = None, function: str | None = None
+) -> PrintabilityReport:
     """Run build -> mesh -> evaluate -> report with slicing skipped (no slicer
     needed). Writes into `<example_dir>/output/check/` by default -- fully
     disposable, wiped and regenerated on every call; pass `output_dir` to
     redirect artifacts elsewhere (e.g. a scratch dir, when example_dir isn't
-    inside a printlab-managed tree)."""
+    inside a printlab-managed tree). `function` overrides printlab.toml's
+    `[part].function` for this call only, without editing the file."""
     with _translate_errors():
-        return tools.printlab_check(example_dir, output_dir=output_dir)
+        return tools.printlab_check(example_dir, output_dir=output_dir, function=function)
 
 
 @mcp.tool
 def printlab_all(
-    example_dir: str, backend: str = "prusaslicer", output_dir: str | None = None
+    example_dir: str,
+    backend: str = "prusaslicer",
+    output_dir: str | None = None,
+    function: str | None = None,
 ) -> PrintabilityReport:
     """Run the full pipeline: build -> mesh -> slice -> gcode -> evaluate ->
     report. Requires an installed slicer for `backend` (query printlab_doctor
     first) -- 'check' is not valid here; use printlab_check instead. Writes
     into `<example_dir>/output/<backend>/` by default (disposable, wiped each
-    run); pass `output_dir` to redirect artifacts elsewhere."""
+    run); pass `output_dir` to redirect artifacts elsewhere. `function`
+    overrides printlab.toml's `[part].function` for this call only."""
     with _translate_errors():
-        return tools.printlab_all(example_dir, backend, output_dir=output_dir)
+        return tools.printlab_all(example_dir, backend, output_dir=output_dir, function=function)
 
 
 @mcp.tool
 def printlab_orient(
-    example_dir: str, backend: str = "check", output_dir: str | None = None
+    example_dir: str, backend: str = "check", output_dir: str | None = None, function: str | None = None
 ) -> OrientationSearchReport:
     """Try the 6 axis-aligned rotations of part.stl and recommend one by an
     explicit tie-break chain -- minimize overhang area, then maximize wall
@@ -90,9 +110,10 @@ def printlab_orient(
     Mesh-metrics only (no re-slicing candidates); not part of printlab_all.
     `backend` selects which existing build to read/build ('check' is a
     no-slicer sentinel, the default, not a real backend name); pass
-    `output_dir` to redirect artifacts."""
+    `output_dir` to redirect artifacts. `function` overrides printlab.toml's
+    `[part].function` for this call only."""
     with _translate_errors():
-        return tools.printlab_orient(example_dir, backend, output_dir=output_dir)
+        return tools.printlab_orient(example_dir, backend, output_dir=output_dir, function=function)
 
 
 @mcp.tool
@@ -106,10 +127,13 @@ def printlab_render(
     focus_center: tuple[float, float, float] | None = None,
     focus_radius: float | None = None,
     output_dir: str | None = None,
+    function: str | None = None,
 ) -> ToolResult:
     """Render part.stl to PNG(s); returns the RenderReport plus the images
-    inline. Auto-builds via ensure_built if part.stl doesn't exist yet -- no
-    prior printlab_check call is required.
+    inline. Auto-builds via ensure_built if part.stl doesn't exist yet, or if
+    the existing build is stale (edited CAD source, or a different `function`
+    than what built it -- `rebuilt` in the returned report says which
+    happened this call) -- no prior printlab_check call is required.
 
     `views`: preset camera angles -- iso (3/4 angled), front/back (look
     along Y, lengthwise side profile), left/right (look along X, end-on
@@ -129,7 +153,10 @@ def printlab_render(
 
     `backend` selects which existing build to read/build from ('check' is a
     no-slicer sentinel, the default, not a real backend name); pass
-    `output_dir` to redirect artifacts elsewhere."""
+    `output_dir` to redirect artifacts elsewhere. `function` overrides
+    printlab.toml's `[part].function` for this call only -- switching it
+    forces a rebuild even if `part.stl` already exists, so you never get a
+    stale render of the other build target."""
     with _translate_errors():
         report = tools.printlab_render(
             example_dir,
@@ -141,6 +168,7 @@ def printlab_render(
             focus_center=focus_center,
             focus_radius=focus_radius,
             output_dir=output_dir,
+            function=function,
         )
     # layout="grid" returns one RenderedView per view but they all share the
     # same composite output_path -- de-dupe so the image isn't attached
@@ -158,19 +186,109 @@ def printlab_render(
 
 @mcp.tool
 def printlab_fea(
-    example_dir: str, backend: str = "check", output_dir: str | None = None
+    example_dir: str, backend: str = "check", output_dir: str | None = None, function: str | None = None
 ) -> FEAReport:
     """Run a linear-static FEA (CalculiX) using printlab.toml's [fea] load
     case. Requires the `fea` extra (gmsh) and `ccx` on PATH; a crude
     single-run analysis on placeholder material constants, not
     certification-grade. Requires the target's printlab.toml to have an
     [fea] table (`load_point_mm`, `load_force_n`, `load_region_radius_mm`,
-    optional `fixed_region`) -- call printlab_describe first to check
+    optional `fixed_region`, optional `mesh_size_mm` -- see
+    printlab_fea_preview to check meshability first, and to tune
+    `mesh_size_mm` for a part combining a large overall footprint with fine
+    local features) -- call printlab_describe first to check
     `fea_configured` and avoid a guaranteed-fail round trip; only
     examples/hook has one built in today. `backend` is a no-slicer sentinel
-    by default ('check'); pass `output_dir` to redirect artifacts."""
+    by default ('check'); pass `output_dir` to redirect artifacts. `function`
+    overrides printlab.toml's `[part].function` for this call only. Meshing
+    runs in an isolated subprocess, so a Gmsh-level meshing failure can only
+    fail this call, never crash the server."""
     with _translate_errors():
-        return tools.printlab_fea(example_dir, backend, output_dir=output_dir)
+        return tools.printlab_fea(example_dir, backend, output_dir=output_dir, function=function)
+
+
+@mcp.tool
+def printlab_fea_preview(
+    example_dir: str,
+    backend: str = "check",
+    mesh_size_mm: float | None = None,
+    output_dir: str | None = None,
+    function: str | None = None,
+) -> FEAMeshPreviewReport:
+    """Mesh-only, `ccx`-free pre-flight ahead of printlab_fea: reports whether
+    `mesh_size_mm` (or the default ~bbox-diagonal/20 heuristic) can mesh the
+    part's geometry at all, without running a full FEA solve. Does not
+    require a [fea] load case in printlab.toml (meshing needs only the built
+    part.step) -- unlike printlab_fea, this works on any buildable part.
+    Meshing runs in the same isolated subprocess as a real FEA run, so a
+    meshing failure comes back as a structured `status="error"` report, never
+    a crash. Use this before printlab_fea on a part combining a large overall
+    footprint with fine local features (a thin hinge/latch next to a
+    full-size box), where the default mesh sizing is known to be too coarse."""
+    with _translate_errors():
+        return tools.printlab_fea_preview(
+            example_dir, backend, mesh_size_mm=mesh_size_mm, output_dir=output_dir, function=function
+        )
+
+
+@mcp.tool
+def printlab_probe(
+    example_dir: str,
+    points: list[tuple[float, float, float]],
+    backend: str = "check",
+    tolerance_mm: float = 1e-6,
+    output_dir: str | None = None,
+    function: str | None = None,
+) -> ProbeReport:
+    """Classify each of `points` (x, y, z in mm, the part's native coordinate
+    frame) as "IN"/"OUT"/"ON" the built solid -- e.g. to confirm a hinge
+    fold's resting position, or that a snap-latch's protrusion actually
+    clears its catch, without writing a one-off OCP script. Classifies
+    against the exact CAD boundary representation (part.step) via OCP's
+    solid classifier, not the tessellated STL, so the answer is exact.
+    `tolerance_mm` is how close to the boundary counts as "ON" rather than
+    "IN"/"OUT". `function` overrides printlab.toml's `[part].function` for
+    this call only."""
+    with _translate_errors():
+        return tools.printlab_probe(
+            example_dir, points, backend, tolerance_mm=tolerance_mm, output_dir=output_dir, function=function
+        )
+
+
+@mcp.tool
+def printlab_export(
+    example_dir: str,
+    backend: str,
+    dest_dir: str,
+    formats: list[str] | None = None,
+    name_prefix: str | None = None,
+) -> ExportReport:
+    """Copy named deliverables out of the disposable `output/<backend>/` tree
+    into `dest_dir`, renamed to `{name_prefix or the part's name}.<ext>` --
+    the "here are the final files" step, instead of hand-copying files out
+    with new names. `formats` (default `["stl", "step"]`) may include `stl`,
+    `step`, `3mf` (only present after a bambu/orca `printlab_all` run),
+    `gcode` (only present after any `printlab_all` run), and `render` (every
+    `render_*.png` from a prior printlab_render call, fanned out to one file
+    per view). Does not build anything itself -- run printlab_check/_all/
+    _render first for whichever formats you're requesting. A requested
+    format whose source doesn't exist yet is recorded as a `warning`, not a
+    hard failure; the rest still get copied."""
+    with _translate_errors():
+        return tools.printlab_export(example_dir, backend, dest_dir, formats=formats, name_prefix=name_prefix)
+
+
+@mcp.tool
+def printlab_diff(report_a: str, report_b: str) -> MetricsDiffReport:
+    """Diff two printability_report.json runs: which `metrics{}` values
+    changed (numerically, where both sides are numeric) and which `checks[]`
+    entries changed status. `report_a`/`report_b` are each either a
+    printability_report.json path directly, or a directory containing one.
+    Makes "compare metrics numerically across runs, not visually" mechanical
+    instead of an eyeballed JSON diff -- call this after an iterate-and-
+    recheck loop's before/after printlab_check runs."""
+    with _translate_errors():
+        return tools.printlab_diff(report_a, report_b)
 
 
 @mcp.tool

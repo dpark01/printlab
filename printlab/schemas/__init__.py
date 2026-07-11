@@ -15,11 +15,14 @@ from printlab.schemas.common import (
     PrintLabArtifact,
     Status,
 )
+from printlab.schemas.diff import CheckStatusChange, MetricDelta, MetricsDiffReport
 from printlab.schemas.evaluation import PrintabilityCheck, PrintabilityReport
-from printlab.schemas.fea import FEALoadCase, FEAReport
+from printlab.schemas.export import ExportedFile, ExportReport
+from printlab.schemas.fea import FEALoadCase, FEAMeshPreviewReport, FEAReport
 from printlab.schemas.gcode import GCodeReport
 from printlab.schemas.mesh import MeshRepairReport, MeshReport
 from printlab.schemas.orientation import OrientationCandidate, OrientationSearchReport
+from printlab.schemas.probe import ProbedPoint, ProbeReport
 from printlab.schemas.profiles import MaterialProfile, PrinterProfile, ProcessProfile
 from printlab.schemas.provenance import RunManifest
 from printlab.schemas.rendering import RenderedView, RenderReport
@@ -30,18 +33,26 @@ __all__ = [
     "ArtifactError",
     "BBox",
     "Capabilities",
+    "CheckStatusChange",
+    "ExportReport",
+    "ExportedFile",
     "FEALoadCase",
+    "FEAMeshPreviewReport",
     "FEAReport",
     "GCodeReport",
     "MaterialProfile",
     "MeshRepairReport",
     "MeshReport",
+    "MetricDelta",
+    "MetricsDiffReport",
     "OrientationCandidate",
     "OrientationSearchReport",
     "PrintLabArtifact",
     "PrintabilityCheck",
     "PrintabilityReport",
     "PrinterProfile",
+    "ProbeReport",
+    "ProbedPoint",
     "ProcessProfile",
     "RenderReport",
     "RenderedView",
@@ -59,6 +70,10 @@ ARTIFACT_MODELS = [
     OrientationSearchReport,
     RenderReport,
     FEAReport,
+    FEAMeshPreviewReport,
+    ProbeReport,
+    ExportReport,
+    MetricsDiffReport,
     SliceRequest,
     SliceResult,
     GCodeReport,

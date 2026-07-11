@@ -12,6 +12,7 @@ invokes a slicer -- see `printlab.pipeline.run_check`.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import typer
@@ -53,16 +54,47 @@ _FocusCenterOption = typer.Option(
 _FocusRadiusOption = typer.Option(
     None, "--focus-radius", help="Half-width, mm, of the --focus-center cube; requires --focus-center."
 )
+_FunctionOption = typer.Option(
+    None,
+    "--function",
+    help="Override printlab.toml's [part].function for this call only, without editing the file.",
+)
+_MeshSizeOption = typer.Option(
+    None,
+    "--mesh-size",
+    help="Override the default ~bbox-diagonal/20 characteristic element size (mm) for FEA meshing.",
+)
 
 
 def _resolve_output_dir(config: pipeline.PartConfig, backend: str, output: Path | None) -> Path:
     return Path(output) if output else pipeline.default_output_dir(config, backend)
 
 
+def _apply_function_override(config: pipeline.PartConfig, function: str | None) -> pipeline.PartConfig:
+    return config if function is None else replace(config, build_function=function)
+
+
+def _ensure_built(config: pipeline.PartConfig, output_dir: Path) -> None:
+    """Build into `output_dir` if `part.stl` isn't present yet, or the
+    existing build is stale (edited CAD source, or `--function` selecting a
+    different builder than what produced it) -- mirrors
+    printlab_mcp.tools.ensure_built so `--function` on orient/render/fea has
+    an effect without a separate explicit `printlab build` first."""
+    stl_path = output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
+    if not stl_path.is_file() or not pipeline.build_is_fresh(config, output_dir):
+        pipeline.prepare_output_dir(output_dir, clean=False)
+        pipeline.stage_build(config, output_dir)
+
+
 @app.command()
-def build(example_dir: Path, backend: str = _BackendOption, output: Path | None = _OutputOption) -> None:
+def build(
+    example_dir: Path,
+    backend: str = _BackendOption,
+    output: Path | None = _OutputOption,
+    function: str | None = _FunctionOption,
+) -> None:
     """Build CAD source -> part.step + part.stl."""
-    config = pipeline.load_part_config(example_dir)
+    config = _apply_function_override(pipeline.load_part_config(example_dir), function)
     output_dir = _resolve_output_dir(config, backend, output)
     pipeline.prepare_output_dir(output_dir, clean=False)
     step_path, stl_path = pipeline.stage_build(config, output_dir)
@@ -96,15 +128,23 @@ def repair(example_dir: Path, backend: str = _BackendOption, output: Path | None
 
 
 @app.command()
-def orient(example_dir: Path, backend: str = _BackendOption, output: Path | None = _OutputOption) -> None:
+def orient(
+    example_dir: Path,
+    backend: str = _BackendOption,
+    output: Path | None = _OutputOption,
+    function: str | None = _FunctionOption,
+) -> None:
     """Try axis-aligned rotations of part.stl -> orientation_search_report.json.
 
     Mesh-metrics-only ranking (no re-slicing candidates); not part of
     `printlab all`. See printlab.mesh.orientation for the tie-break chain
-    used to pick a winner.
+    used to pick a winner. Auto-builds if part.stl is missing or stale
+    (edited CAD source, or a different `--function`); pass `--function` to
+    check an alternate builder without editing printlab.toml.
     """
-    config = pipeline.load_part_config(example_dir)
+    config = _apply_function_override(pipeline.load_part_config(example_dir), function)
     output_dir = _resolve_output_dir(config, backend, output)
+    _ensure_built(config, output_dir)
     stl_path = output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
     report = pipeline.stage_orientation_search(stl_path, output_dir)
     typer.echo(report.model_dump_json(indent=2))
@@ -123,6 +163,7 @@ def render(
     focus_radius: float | None = _FocusRadiusOption,
     backend: str = _BackendOption,
     output: Path | None = _OutputOption,
+    function: str | None = _FunctionOption,
 ) -> None:
     """Render part.stl to PNG(s) -> render_report.json + render_*.png.
 
@@ -137,11 +178,15 @@ def render(
     mesh -- useful for a small feature on an otherwise large part. Not part
     of `printlab all`. The PNGs are not hashed for reproducibility
     (matplotlib-version dependent, like `part.stl`); only
-    `render_report.json`'s camera metadata is.
+    `render_report.json`'s camera metadata is. Auto-builds if part.stl is
+    missing or stale (edited CAD source, or a different `--function`) --
+    `render_report.json`'s `rebuilt` field says whether this call did so.
     """
-    config = pipeline.load_part_config(example_dir)
+    config = _apply_function_override(pipeline.load_part_config(example_dir), function)
     output_dir = _resolve_output_dir(config, backend, output)
     stl_path = output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
+    rebuilt = not stl_path.is_file() or not pipeline.build_is_fresh(config, output_dir)
+    _ensure_built(config, output_dir)
     views: list[str | CameraView]
     if elevation is not None and azimuth is not None:
         views = [CameraView("custom", elevation, azimuth)]
@@ -156,34 +201,76 @@ def render(
         layout=layout,
         focus_center=focus_center,
         focus_radius=focus_radius,
+        rebuilt=rebuilt,
     )
     typer.echo(report.model_dump_json(indent=2))
 
 
 @app.command()
-def fea(example_dir: Path, backend: str = _BackendOption, output: Path | None = _OutputOption) -> None:
+def fea(
+    example_dir: Path,
+    backend: str = _BackendOption,
+    output: Path | None = _OutputOption,
+    function: str | None = _FunctionOption,
+    mesh_size: float | None = _MeshSizeOption,
+) -> None:
     """Run a linear-static FEA (CalculiX) using printlab.toml's [fea] load
     case -> fea_report.json.
 
     Requires the `fea` extra (gmsh) and `ccx` on PATH -- see `printlab
     doctor`. Not part of `printlab all`; a crude single-run analysis on
     placeholder material constants (see printlab.schemas.profiles), not a
-    certification-grade result.
+    certification-grade result. Meshing runs in an isolated subprocess, so a
+    Gmsh-level meshing failure can only fail this command, never crash the
+    caller. `--mesh-size` overrides the [fea] table's `mesh_size_mm` (or the
+    default ~bbox-diagonal/20 heuristic) -- see `printlab fea-preview` to
+    check meshability first. Auto-builds if part.step is missing or stale.
     """
-    config = pipeline.load_part_config(example_dir)
+    config = _apply_function_override(pipeline.load_part_config(example_dir), function)
     if config.fea_load_case is None:
         typer.echo(f"error: {example_dir} has no [fea] load case in printlab.toml", err=True)
         raise typer.Exit(code=1)
+    load_case = config.fea_load_case if mesh_size is None else config.fea_load_case.model_copy(
+        update={"mesh_size_mm": mesh_size}
+    )
     output_dir = _resolve_output_dir(config, backend, output)
+    _ensure_built(config, output_dir)
     step_path = output_dir / pipeline.ARTIFACT_FILENAMES["step"]
     _, material, _ = pipeline.load_profiles(config)
     try:
-        report = pipeline.stage_fea(
-            step_path, output_dir, load_case=config.fea_load_case, material=material
-        )
+        report = pipeline.stage_fea(step_path, output_dir, load_case=load_case, material=material)
     except pipeline.PipelineError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
+    typer.echo(report.model_dump_json(indent=2))
+    if report.status.value == "error":
+        raise typer.Exit(code=1)
+
+
+@app.command(name="fea-preview")
+def fea_preview(
+    example_dir: Path,
+    backend: str = _BackendOption,
+    output: Path | None = _OutputOption,
+    function: str | None = _FunctionOption,
+    mesh_size: float | None = _MeshSizeOption,
+) -> None:
+    """Mesh-only, `ccx`-free pre-flight ahead of `printlab fea` ->
+    fea_mesh_preview.json.
+
+    Reports whether `--mesh-size` (or the default heuristic) can mesh the
+    part's geometry at all, without running a full FEA solve or requiring a
+    [fea] load case in printlab.toml. Meshing runs in the same isolated
+    subprocess as `printlab fea`, so a meshing failure comes back as a
+    structured `status="error"` report, never a crash -- use this before
+    `printlab fea` on a part combining a large overall footprint with fine
+    local features.
+    """
+    config = _apply_function_override(pipeline.load_part_config(example_dir), function)
+    output_dir = _resolve_output_dir(config, backend, output)
+    _ensure_built(config, output_dir)
+    step_path = output_dir / pipeline.ARTIFACT_FILENAMES["step"]
+    report = pipeline.stage_fea_preview(step_path, output_dir, mesh_size_mm=mesh_size)
     typer.echo(report.model_dump_json(indent=2))
     if report.status.value == "error":
         raise typer.Exit(code=1)
@@ -263,7 +350,9 @@ def report(example_dir: Path, backend: str = _BackendOption, output: Path | None
 
 
 @app.command()
-def check(example_dir: Path, output: Path | None = _OutputOption) -> None:
+def check(
+    example_dir: Path, output: Path | None = _OutputOption, function: str | None = _FunctionOption
+) -> None:
     """Run build -> mesh -> evaluate -> report with slicing skipped entirely.
 
     No slicer required: mesh-derived printability checks (manifold,
@@ -271,9 +360,11 @@ def check(example_dir: Path, output: Path | None = _OutputOption) -> None:
     (filament mass, print time, layer count) come back null. Writes to
     `output/check/` by default, not a backend-named directory. See
     `printlab all` for the full-fidelity pipeline once a slicer is installed.
+    `--function` overrides printlab.toml's `[part].function` for this call
+    only, without editing the file.
     """
     try:
-        result = pipeline.run_check(example_dir, output_dir=output)
+        result = pipeline.run_check(example_dir, output_dir=output, build_function=function)
     except pipeline.PipelineError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
@@ -287,11 +378,18 @@ def check(example_dir: Path, output: Path | None = _OutputOption) -> None:
 
 @app.command(name="all")
 def run_all_cmd(
-    example_dir: Path, backend: str = _BackendOption, output: Path | None = _OutputOption
+    example_dir: Path,
+    backend: str = _BackendOption,
+    output: Path | None = _OutputOption,
+    function: str | None = _FunctionOption,
 ) -> None:
-    """Run the full pipeline: build -> mesh -> slice -> gcode -> evaluate -> report."""
+    """Run the full pipeline: build -> mesh -> slice -> gcode -> evaluate -> report.
+
+    `--function` overrides printlab.toml's `[part].function` for this call
+    only, without editing the file.
+    """
     try:
-        result = pipeline.run_all(example_dir, backend, output_dir=output)
+        result = pipeline.run_all(example_dir, backend, output_dir=output, build_function=function)
     except pipeline.PipelineError as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(code=1) from exc
