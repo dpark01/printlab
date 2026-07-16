@@ -11,6 +11,17 @@ from typing import Any
 class CadBuildError(RuntimeError):
     """Raised when a CAD backend cannot produce the required artifacts."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "cad_build_failed",
+        context: dict[str, Any] | None = None,
+    ):
+        super().__init__(message)
+        self.code = code
+        self.context = context or {}
+
 
 @dataclass(frozen=True)
 class CadBuildRequest:
@@ -28,6 +39,7 @@ class CadBuildResult:
     dependencies: tuple[Path, ...] = ()
     tool_versions: dict[str, str] = field(default_factory=dict)
     settings: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class CadBackend(ABC):
@@ -38,3 +50,7 @@ class CadBackend(ABC):
     @abstractmethod
     def build(self, request: CadBuildRequest) -> CadBuildResult:
         """Build ``request.source_path`` into ``request.output_dir``."""
+
+    def tool_versions(self, request: CadBuildRequest) -> dict[str, str]:
+        """Return native tool versions that participate in build freshness."""
+        return {}

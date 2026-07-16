@@ -14,8 +14,12 @@ from printlab.cad.backend import (
     load_build_function,
 )
 from printlab.cad.base import CadBackend, CadBuildError, CadBuildRequest, CadBuildResult
+from printlab.cad.openscad import OpenSCADBackend
 
-_BACKENDS: dict[str, CadBackend] = {"cadquery": CadQueryBackend()}
+_BACKENDS: dict[str, CadBackend] = {
+    "cadquery": CadQueryBackend(),
+    "openscad": OpenSCADBackend(),
+}
 
 
 def get_cad_backend(name: str) -> CadBackend:
@@ -39,6 +43,7 @@ __all__ = [
     "CadBuildResult",
     "CadQueryBackend",
     "ExportSettings",
+    "OpenSCADBackend",
     "PartBuildError",
     "available_cad_backend_names",
     "build_part",

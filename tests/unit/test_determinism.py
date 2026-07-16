@@ -9,7 +9,7 @@ from printlab.determinism import (
     hash_mapping,
     normalize,
 )
-from printlab.schemas import BBox, MeshReport
+from printlab.schemas import BBox, CadBuildReport, MeshReport
 
 
 def test_normalize_strips_volatile_keys():
@@ -93,4 +93,29 @@ def test_hash_artifact_changes_when_metrics_change():
 def test_hash_artifact_ignores_harmless_float_noise():
     a = _sample_mesh_report(volume_mm3=1000.0000001)
     b = _sample_mesh_report(volume_mm3=1000.0000002)
+    assert hash_artifact(a) == hash_artifact(b)
+
+
+def test_cad_build_hash_is_stable_across_clone_paths():
+    common = {
+        "backend_name": "openscad",
+        "tool_versions": {"openscad": "2021.01", "freecad": "1.1.1"},
+        "settings": {"defines": {"width": 10}},
+        "metadata": {"solid_count": 1},
+    }
+    a = CadBuildReport(
+        **common,
+        source_path="/home/alice/printlab/example/part.scad",
+        step_path="/home/alice/printlab/example/output/part.step",
+        stl_path="/home/alice/printlab/example/output/part.stl",
+        dependencies=["/home/alice/printlab/example/lib.scad"],
+    )
+    b = CadBuildReport(
+        **common,
+        source_path="/Users/bob/printlab/example/part.scad",
+        step_path="/Users/bob/printlab/example/output/part.step",
+        stl_path="/Users/bob/printlab/example/output/part.stl",
+        dependencies=["/Users/bob/printlab/example/lib.scad"],
+    )
+
     assert hash_artifact(a) == hash_artifact(b)

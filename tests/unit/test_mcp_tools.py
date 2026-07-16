@@ -76,6 +76,7 @@ def test_ensure_built_skips_when_fresh(tmp_path, monkeypatch):
     output_dir = tmp_path / "output" / "check"
     output_dir.mkdir(parents=True)
     (output_dir / pipeline.ARTIFACT_FILENAMES["stl"]).write_text("solid x\nendsolid x\n")
+    (output_dir / pipeline.ARTIFACT_FILENAMES["step"]).write_text("ISO-10303-21;\n")
     # build_is_fresh compares against the CAD module's *current* content hash,
     # so the fingerprint has to be computed from a real part.py on disk (not
     # the fake-hash shortcut _write_fresh_fingerprint/_fake_build use).
@@ -104,6 +105,7 @@ def test_ensure_built_rebuilds_stale_build_even_if_stl_present(tmp_path, monkeyp
     output_dir = tmp_path / "output" / "check"
     output_dir.mkdir(parents=True)
     (output_dir / pipeline.ARTIFACT_FILENAMES["stl"]).write_text("solid x\nendsolid x\n")
+    (output_dir / pipeline.ARTIFACT_FILENAMES["step"]).write_text("ISO-10303-21;\n")
     # No build_fingerprint.json written -- simulates a build from before this
     # fix, or a stale/foreign output dir.
 
@@ -278,6 +280,7 @@ def test_printlab_render_reports_rebuilt_false_when_build_is_fresh(tmp_path, mon
     output_dir = tmp_path / "output" / "check"
     output_dir.mkdir(parents=True)
     (output_dir / pipeline.ARTIFACT_FILENAMES["stl"]).write_text("solid x\nendsolid x\n")
+    (output_dir / pipeline.ARTIFACT_FILENAMES["step"]).write_text("ISO-10303-21;\n")
     config = pipeline.load_part_config(tmp_path)
     (output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"]).write_text(
         json.dumps(

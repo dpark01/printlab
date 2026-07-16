@@ -22,7 +22,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from printlab.cad import CadBuildRequest, get_cad_backend
+from printlab.cad import CadBuildError, CadBuildRequest, CadBuildResult, get_cad_backend
 from printlab.cad.probe import classify_points, load_solid
 from printlab.determinism import hash_artifact, hash_file
 from printlab.evaluation import evaluate as evaluate_printability
@@ -38,6 +38,7 @@ from printlab.rendering import DEFAULT_VIEWS, CameraView
 from printlab.rendering import render as render_part
 from printlab.reporting import render_html, render_markdown
 from printlab.schemas import (
+    CadBuildReport,
     FEALoadCase,
     FEAMeshPreviewReport,
     FEAReport,
@@ -63,6 +64,7 @@ ARTIFACT_FILENAMES = {
     "step": "part.step",
     "stl": "part.stl",
     "build_fingerprint": ".build_fingerprint.json",
+    "cad_build_report": "cad_build_report.json",
     "mesh_report": "mesh_report.json",
     "mesh_repair_report": "mesh_repair_report.json",
     "stl_repaired": "part_repaired.stl",
@@ -146,6 +148,12 @@ def load_part_config(example_dir: Path, *, repo_root: Path | None = None) -> Par
     profiles = data["profiles"]
     fea_table = data.get("fea")
     cad_backend = part.get("cad_backend", "cadquery")
+    try:
+        get_cad_backend(cad_backend)
+    except CadBuildError as exc:
+        raise PipelineError(str(exc)) from exc
+    if cad_backend != "cadquery" and "function" in part:
+        raise PipelineError(f"[part].function is only valid for the cadquery backend, not {cad_backend}")
     source = part.get("source", part.get("module"))
     if source is None:
         raise PipelineError("[part] must define `source` (or legacy `module`)")
@@ -204,12 +212,25 @@ def load_profiles(config: PartConfig) -> tuple[PrinterProfile, MaterialProfile, 
     )
 
 
-def _build_fingerprint(config: PartConfig) -> dict:
+def _build_request(config: PartConfig, output_dir: Path) -> CadBuildRequest:
+    return CadBuildRequest(
+        source_path=config.source_path,
+        output_dir=output_dir,
+        build_target=config.build_function,
+        options=config.cad_options,
+    )
+
+
+def _build_fingerprint(config: PartConfig, result: CadBuildResult | None = None) -> dict:
+    dependencies = result.dependencies if result and result.dependencies else (config.source_path,)
     return {
         "cad_backend": config.cad_backend,
+        "cad_options": config.cad_options,
         "cad_source_sha256": hash_file(config.source_path),
         "build_function": config.build_function,
         "source_path": str(config.source_path),
+        "dependency_sha256": {str(path): hash_file(path) for path in dependencies},
+        "tool_versions": result.tool_versions if result else {},
     }
 
 
@@ -224,28 +245,102 @@ def build_is_fresh(config: PartConfig, output_dir: Path) -> bool:
     unreadable fingerprint, or a missing CAD source file, counts as not fresh
     (forces a rebuild rather than risking a false "fresh").
     """
-    fingerprint_path = Path(output_dir) / ARTIFACT_FILENAMES["build_fingerprint"]
-    if not fingerprint_path.is_file() or not config.source_path.is_file():
+    output_dir = Path(output_dir)
+    fingerprint_path = output_dir / ARTIFACT_FILENAMES["build_fingerprint"]
+    required_outputs = (output_dir / ARTIFACT_FILENAMES["step"], output_dir / ARTIFACT_FILENAMES["stl"])
+    if (
+        not fingerprint_path.is_file()
+        or not config.source_path.is_file()
+        or not all(path.is_file() for path in required_outputs)
+    ):
         return False
     try:
         recorded = json.loads(fingerprint_path.read_text())
     except json.JSONDecodeError:
         return False
-    return recorded == _build_fingerprint(config)
+    if not isinstance(recorded, dict):
+        return False
+    current = _build_fingerprint(config)
+    for key in ("cad_backend", "cad_options", "cad_source_sha256", "build_function", "source_path"):
+        if recorded.get(key) != current[key]:
+            return False
+    dependency_hashes = recorded.get("dependency_sha256")
+    if (
+        not isinstance(dependency_hashes, dict)
+        or not dependency_hashes
+        or not all(
+            isinstance(path, str) and isinstance(digest, str)
+            for path, digest in dependency_hashes.items()
+        )
+    ):
+        return False
+    try:
+        if any(
+            not Path(path).is_file() or hash_file(Path(path)) != digest
+            for path, digest in dependency_hashes.items()
+        ):
+            return False
+        backend = get_cad_backend(config.cad_backend)
+        tool_versions = backend.tool_versions(_build_request(config, output_dir))
+    except (OSError, CadBuildError):
+        return False
+    return recorded.get("tool_versions", {}) == tool_versions
 
 
 def stage_build(config: PartConfig, output_dir: Path) -> tuple[Path, Path]:
     backend = get_cad_backend(config.cad_backend)
-    result = backend.build(
-        CadBuildRequest(
-            source_path=config.source_path,
-            output_dir=output_dir,
-            build_target=config.build_function,
-            options=config.cad_options,
+    report_path = output_dir / ARTIFACT_FILENAMES["cad_build_report"]
+    try:
+        result = backend.build(_build_request(config, output_dir))
+    except CadBuildError as exc:
+        _write_json_atomic(
+            report_path,
+            CadBuildReport(
+                status=Status.ERROR,
+                errors=[
+                    ArtifactError(code=exc.code, message=str(exc), stage="build", context=exc.context)
+                ],
+                backend_name=config.cad_backend,
+                source_path=str(config.source_path),
+            ),
         )
+        raise
+    _write_json_atomic(
+        report_path,
+        CadBuildReport(
+            backend_name=result.backend_name,
+            source_path=str(config.source_path),
+            step_path=str(result.step_path),
+            stl_path=str(result.stl_path),
+            dependencies=[str(path) for path in result.dependencies],
+            tool_versions=result.tool_versions,
+            settings=result.settings,
+            metadata=result.metadata,
+        ),
     )
-    _write_json_atomic_raw(output_dir / ARTIFACT_FILENAMES["build_fingerprint"], _build_fingerprint(config))
+    _write_json_atomic_raw(
+        output_dir / ARTIFACT_FILENAMES["build_fingerprint"], _build_fingerprint(config, result)
+    )
     return result.step_path, result.stl_path
+
+
+def _read_cad_build_report(output_dir: Path) -> CadBuildReport:
+    return CadBuildReport.model_validate_json(
+        (output_dir / ARTIFACT_FILENAMES["cad_build_report"]).read_text()
+    )
+
+
+def _cad_manifest_inputs(report: CadBuildReport, stl_path: Path) -> dict[str, Path]:
+    inputs = {"cad_source": Path(report.source_path), "stl": stl_path}
+    source = Path(report.source_path).resolve()
+    dependency_index = 1
+    for dependency in report.dependencies:
+        path = Path(dependency)
+        if path.resolve() == source:
+            continue
+        inputs[f"cad_dependency_{dependency_index}"] = path
+        dependency_index += 1
+    return inputs
 
 
 def stage_mesh(stl_path: Path, output_dir: Path) -> MeshReport:
@@ -498,13 +593,15 @@ def run_all(
     printer, material, process = load_profiles(config)
 
     step_path, stl_path = stage_build(config, output_dir)
+    cad_build = _read_cad_build_report(output_dir)
     mesh = stage_mesh(stl_path, output_dir)
     slice_result = stage_slice(
         config, stl_path, output_dir, backend_name, printer=printer, material=material, process=process
     )
     if slice_result.status.value == "error":
         manifest = build_run_manifest(
-            input_hashes=hash_inputs({"cad_source": config.source_path, "stl": stl_path}),
+            tool_versions=cad_build.tool_versions,
+            input_hashes=hash_inputs(_cad_manifest_inputs(cad_build, stl_path)),
             profile_hashes=hash_inputs(
                 {
                     "printer": config.printer_profile_path,
@@ -522,8 +619,8 @@ def run_all(
     printability = stage_evaluate(mesh, gcode, output_dir, printer=printer)
 
     manifest = build_run_manifest(
-        tool_versions={backend_name: slice_result.backend_version},
-        input_hashes=hash_inputs({"cad_source": config.source_path, "stl": stl_path}),
+        tool_versions={**cad_build.tool_versions, backend_name: slice_result.backend_version},
+        input_hashes=hash_inputs(_cad_manifest_inputs(cad_build, stl_path)),
         profile_hashes=hash_inputs(
             {
                 "printer": config.printer_profile_path,
@@ -536,6 +633,7 @@ def run_all(
     manifest = finalize_manifest(
         manifest,
         {
+            "cad_build_report": hash_artifact(cad_build),
             "mesh_report": hash_artifact(mesh),
             "slice_result": hash_artifact(slice_result),
             "gcode_report": hash_artifact(gcode),
@@ -549,6 +647,7 @@ def run_all(
         "output_dir": output_dir,
         "step_path": step_path,
         "stl_path": stl_path,
+        "cad_build": cad_build,
         "mesh": mesh,
         "slice_result": slice_result,
         "gcode": gcode,
@@ -582,11 +681,13 @@ def run_check(
     printer, _, _ = load_profiles(config)
 
     step_path, stl_path = stage_build(config, output_dir)
+    cad_build = _read_cad_build_report(output_dir)
     mesh = stage_mesh(stl_path, output_dir)
     printability = stage_evaluate(mesh, None, output_dir, printer=printer)
 
     manifest = build_run_manifest(
-        input_hashes=hash_inputs({"cad_source": config.source_path, "stl": stl_path}),
+        tool_versions=cad_build.tool_versions,
+        input_hashes=hash_inputs(_cad_manifest_inputs(cad_build, stl_path)),
         profile_hashes=hash_inputs(
             {
                 "printer": config.printer_profile_path,
@@ -598,6 +699,7 @@ def run_check(
     manifest = finalize_manifest(
         manifest,
         {
+            "cad_build_report": hash_artifact(cad_build),
             "mesh_report": hash_artifact(mesh),
             "printability_report": hash_artifact(printability),
         },
@@ -609,6 +711,7 @@ def run_check(
         "output_dir": output_dir,
         "step_path": step_path,
         "stl_path": stl_path,
+        "cad_build": cad_build,
         "mesh": mesh,
         "printability": printability,
         "manifest": manifest,

@@ -8,6 +8,7 @@ duplicated per stage.
 
 from __future__ import annotations
 
+from printlab.schemas.cad import CadBuildReport
 from printlab.schemas.common import (
     SCHEMA_VERSION,
     ArtifactError,
@@ -32,6 +33,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "ArtifactError",
     "BBox",
+    "CadBuildReport",
     "Capabilities",
     "CheckStatusChange",
     "ExportReport",
@@ -65,6 +67,7 @@ __all__ = [
 #: All artifact model classes that get a committed JSON Schema under
 #: docs/schemas/. Keep in sync with __all__ above; tests assert this.
 ARTIFACT_MODELS = [
+    CadBuildReport,
     MeshReport,
     MeshRepairReport,
     OrientationSearchReport,
