@@ -70,6 +70,19 @@ def _profiles(tmp_path: Path, backend_name: str):
     return printer, material, process_profile
 
 
+def test_prusaslicer_version_strips_flatpak_build_metadata(monkeypatch):
+    backend = PrusaSlicerBackend()
+    result = subprocess.CompletedProcess(
+        args=[],
+        returncode=0,
+        stdout="PrusaSlicer-2.9.6+flathub.org based on Slic3r\n",
+        stderr="",
+    )
+    monkeypatch.setattr(backend, "run_cli", lambda binary, args, **kwargs: result)
+
+    assert backend._version(Path("/fake/prusa-slicer")) == "2.9.6"
+
+
 def test_prusaslicer_nonzero_exit_with_gcode_present_is_a_warning_not_an_error(tmp_path, monkeypatch):
     printer, material, process = _profiles(tmp_path, "prusaslicer")
     input_model = tmp_path / "part.stl"

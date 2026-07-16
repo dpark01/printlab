@@ -47,7 +47,8 @@ class PrusaSlicerBackend(PrusaLikeBackend):
         result = self.run_cli(binary, ["--help"], timeout=30)
         for line in result.stdout.splitlines():
             if line.startswith(_VERSION_PREFIX):
-                return line[len(_VERSION_PREFIX) :].split(" ", 1)[0].strip()
+                version = line[len(_VERSION_PREFIX) :].split(" ", 1)[0].strip()
+                return version.split("+", 1)[0]
         return None
 
     def detect(self) -> Capabilities:

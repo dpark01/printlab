@@ -68,7 +68,8 @@ echo "==> Installing pinned-runtime prerequisites"
 sudo apt-get update
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential curl flatpak fontconfig fonts-liberation gfortran \
-    libarpack2-dev libglu1-mesa libopenblas-dev patch pkg-config xauth xvfb
+    libarpack2-dev libglu1-mesa libopenblas-dev libwebkit2gtk-4.1-0 \
+    patch pkg-config xauth xvfb
 
 echo "==> Installing PrusaSlicer 2.9.6 (pinned Flathub commits)"
 PRUSA_COMMIT="bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79"
@@ -127,9 +128,8 @@ download_pinned \
     "e2006138400b2fa85fa2e160e872d00767eb32964e85075830f7e198a3a876e1"
 FREECAD_DIR="$TOOLS_DIR/FreeCAD-1.1.1-x86_64"
 extract_appimage "$FREECAD_APPIMAGE" "$FREECAD_DIR"
-printf '%s\n' '#!/usr/bin/env bash' 'exec "$(dirname "$0")/AppRun" freecadcmd "$@"' > "$FREECAD_DIR/FreeCADCmd"
-chmod +x "$FREECAD_DIR/FreeCADCmd"
-ln -sf "$FREECAD_DIR/FreeCADCmd" "$BIN_DIR/FreeCADCmd"
+printf '%s\n' '#!/usr/bin/env bash' "exec \"$FREECAD_DIR/AppRun\" freecadcmd \"\$@\"" > "$BIN_DIR/FreeCADCmd"
+chmod +x "$BIN_DIR/FreeCADCmd"
 
 echo "==> Installing CalculiX 2.23 from pinned sources"
 CALCULIX_DIR="$TOOLS_DIR/CalculiX-2.23-x86_64"
