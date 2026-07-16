@@ -45,16 +45,19 @@ build the pinned CalculiX formula when `ccx_2.23` is not already installed.
 **Full-stack setup:**
 
 - macOS: `scripts/setup-macos.sh` installs all Python extras and exact,
-  SHA-256-checked DMG releases for all three slicers, OpenSCAD, and FreeCAD in
-  `~/Applications`; it installs CalculiX from a formula pinned to a repository
-  commit whose source archives are themselves checksummed.
+  SHA-256-checked DMG artifacts for all three slicers and FreeCAD in
+  `~/Applications`. OpenSCAD's signed universal snapshot is installed as a
+  CLI-only bundle under `~/.local/share/printlab/tools` to avoid a spurious
+  macOS Intel-component warning from LaunchServices. The script installs
+  CalculiX from a formula pinned to a repository commit whose source archives
+  are themselves checksummed.
 - Linux/GitHub Actions: `scripts/setup-linux.sh` installs all Python extras,
   PrusaSlicer from pinned application/runtime Flatpak commits, checksummed
   AppImages for Bambu Studio, OrcaSlicer, OpenSCAD, and FreeCAD, and builds
   CalculiX from checksummed sources. It writes every command-line entry point
   under `~/.local/bin` and finishes with `doctor --strict`.
-- The full Linux stack is x86_64-only because the pinned Bambu Studio and
-  OpenSCAD releases do not provide Linux aarch64 artifacts. The installer
+- The full Linux stack is x86_64-only because the pinned Bambu Studio release
+  does not provide a Linux aarch64 artifact. The installer
   rejects unsupported architectures instead of silently producing a partial
   environment.
 
@@ -116,9 +119,9 @@ against at import time (undocumented today; CI's `ubuntu-latest` happens to
 have enough of it installed already).
 
 **Layer 2's native applications are the actual constraint, not layer 1:**
-Bambu Studio and OpenSCAD provide only **x86_64** Linux artifacts at the
-pinned versions. OrcaSlicer and FreeCAD do publish aarch64 artifacts, while
-PrusaSlicer has no Linux binary on its GitHub release and uses Flatpak. A
+Bambu Studio provides only an **x86_64** Linux artifact at the pinned version.
+OpenSCAD, OrcaSlicer, and FreeCAD publish aarch64 artifacts, while PrusaSlicer
+has no Linux binary on its GitHub release and uses Flatpak. A
 container that bundles the complete current stack is therefore realistically
 amd64-only; "multi-arch and complete" isn't simultaneously achievable with
 this tool set.

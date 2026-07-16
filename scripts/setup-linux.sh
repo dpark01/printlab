@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install PrintLab's complete Linux toolchain. Official release artifacts are
 # pinned by URL and SHA-256; PrusaSlicer's Flatpak is pinned by OSTree commit.
-# The full stack is currently x86_64-only because Bambu Studio and OpenSCAD do
-# not publish Linux aarch64 artifacts at the versions pinned in tools.toml.
+# The full stack is currently x86_64-only because Bambu Studio does not publish
+# a Linux aarch64 artifact at the version pinned in tools.toml.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -75,15 +75,17 @@ PRUSA_COMMIT="bf3534e4ffc688bbaf625206f27f9333b1b8820d3425dae19d3083b47e08ce79"
 GNOME_RUNTIME_COMMIT="dec0fb025083b3543c1b1342360af86d5942fb2ac1358df3b8ac66168661b923"
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 if flatpak info --user org.gnome.Platform/x86_64/50 >/dev/null 2>&1; then
-    flatpak update --user --noninteractive --commit="$GNOME_RUNTIME_COMMIT" org.gnome.Platform/x86_64/50
+    :
 else
-    flatpak install --user --noninteractive --commit="$GNOME_RUNTIME_COMMIT" flathub org.gnome.Platform/x86_64/50
+    flatpak install --user --noninteractive flathub org.gnome.Platform/x86_64/50
 fi
+flatpak update --user --noninteractive --commit="$GNOME_RUNTIME_COMMIT" org.gnome.Platform/x86_64/50
 if flatpak info --user com.prusa3d.PrusaSlicer/x86_64/stable >/dev/null 2>&1; then
-    flatpak update --user --noninteractive --commit="$PRUSA_COMMIT" com.prusa3d.PrusaSlicer/x86_64/stable
+    :
 else
-    flatpak install --user --noninteractive --commit="$PRUSA_COMMIT" flathub com.prusa3d.PrusaSlicer/x86_64/stable
+    flatpak install --user --noninteractive flathub com.prusa3d.PrusaSlicer/x86_64/stable
 fi
+flatpak update --user --noninteractive --commit="$PRUSA_COMMIT" com.prusa3d.PrusaSlicer/x86_64/stable
 printf '%s\n' '#!/usr/bin/env bash' 'exec flatpak run com.prusa3d.PrusaSlicer "$@"' > "$BIN_DIR/prusa-slicer"
 chmod +x "$BIN_DIR/prusa-slicer"
 
@@ -107,13 +109,13 @@ ORCA_DIR="$TOOLS_DIR/OrcaSlicer-2.4.2-x86_64"
 extract_appimage "$ORCA_APPIMAGE" "$ORCA_DIR"
 write_wrapper OrcaSlicer "$ORCA_DIR/AppRun"
 
-echo "==> Installing OpenSCAD 2021.01"
-OPENSCAD_APPIMAGE="$TOOLS_DIR/OpenSCAD-2021.01-x86_64.AppImage"
+echo "==> Installing OpenSCAD 2026.06.12 native snapshot"
+OPENSCAD_APPIMAGE="$TOOLS_DIR/OpenSCAD-2026.06.12-x86_64.AppImage"
 download_pinned \
-    "https://github.com/openscad/openscad/releases/download/openscad-2021.01/$(basename "$OPENSCAD_APPIMAGE")" \
+    "https://files.openscad.org/snapshots/$(basename "$OPENSCAD_APPIMAGE")" \
     "$OPENSCAD_APPIMAGE" \
-    "f758528f2cd213f773c7a105fb63bf3b45bf754b0f586fbb7c9cd653ffcd0882"
-OPENSCAD_DIR="$TOOLS_DIR/OpenSCAD-2021.01-x86_64"
+    "4e1739b3ec6314506ff6c5d34158143a2fc3ef857c9367b53d5e49ea2957e2bd"
+OPENSCAD_DIR="$TOOLS_DIR/OpenSCAD-2026.06.12-x86_64"
 extract_appimage "$OPENSCAD_APPIMAGE" "$OPENSCAD_DIR"
 write_wrapper openscad "$OPENSCAD_DIR/AppRun"
 

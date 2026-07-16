@@ -28,9 +28,9 @@ homepage = "https://www.calculix.de/"
 role = "FEA solver (ccx) for linear-static deflection/stress analysis (printlab fea)."
 
 [tools.openscad]
-version = "2021.01"
+version = "2026.06.12"
 homepage = "https://openscad.org/"
-role = "Parametric CAD compiler for the OpenSCAD source backend."
+role = "Parametric CAD compiler for the OpenSCAD source backend (pinned native snapshot)."
 
 [tools.freecad]
 version = "1.1.1"

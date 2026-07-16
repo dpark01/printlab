@@ -33,6 +33,17 @@ install_dmg_app() {
     if [ -d "$target" ] || [ -d "/Applications/$name.app" ]; then
         return
     fi
+    install_dmg_path "$source_path" "$url" "$sha256" "$target"
+}
+
+install_dmg_path() {
+    local source_path="$1"
+    local url="$2"
+    local sha256="$3"
+    local target="$4"
+    if [ -d "$target" ]; then
+        return
+    fi
     local dmg="$TOOLS_DIR/$(basename "$url")"
     local mount_dir
     download_pinned "$url" "$dmg" "$sha256"
@@ -67,16 +78,12 @@ install_dmg_app \
     "https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.4.2/OrcaSlicer_Mac_universal_V2.4.2.dmg" \
     "e15e7bb1b66214ec6e96b169b388004179c4f5f705effcdaf8c80d4992ee0366"
 
-echo "==> Installing OpenSCAD 2021.01"
-if [ ! -d "$APPLICATIONS_DIR/OpenSCAD.app" ] \
-    && [ ! -d "/Applications/OpenSCAD.app" ] \
-    && [ ! -d "/Applications/OpenSCAD-2021.01.app" ]; then
-    install_dmg_app \
-        OpenSCAD \
-        "OpenSCAD-2021.01.app" \
-        "https://files.openscad.org/OpenSCAD-2021.01.dmg" \
-        "4e4568e19992636ba497c04bc2238399c92314fcb7bf75dc3632aa623ca3635e"
-fi
+echo "==> Installing OpenSCAD 2026.06.12 universal snapshot"
+install_dmg_path \
+    "OpenSCAD.app" \
+    "https://files.openscad.org/snapshots/OpenSCAD-2026.06.12.dmg" \
+    "555be2ed313e67657b3d8ba3e1de0acd6141b982fd458776c52d3eda748f57c4" \
+    "$TOOLS_DIR/OpenSCAD-2026.06.12.bundle"
 
 echo "==> Installing FreeCAD 1.1.1"
 case "$(uname -m)" in

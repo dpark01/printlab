@@ -25,6 +25,18 @@ DEFAULT_MAX_RELATIVE_VOLUME_DELTA = 0.005
 DEFAULT_MAX_BBOX_DELTA_MM = 0.1
 
 _OPENSCAD_CANDIDATES = (
+    str(
+        Path.home()
+        / ".local"
+        / "share"
+        / "printlab"
+        / "tools"
+        / "OpenSCAD-2026.06.12.bundle"
+        / "Contents"
+        / "MacOS"
+        / "OpenSCAD"
+    ),
+    str(Path.home() / "Applications" / "OpenSCAD-2026.06.12.app" / "Contents" / "MacOS" / "OpenSCAD"),
     str(Path.home() / "Applications" / "OpenSCAD.app" / "Contents" / "MacOS" / "OpenSCAD"),
     "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD",
     "/Applications/OpenSCAD-2021.01.app/Contents/MacOS/OpenSCAD",

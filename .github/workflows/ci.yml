@@ -35,7 +35,7 @@ jobs:
           path: |
             ~/.local/share/printlab/tools
             ~/.local/share/flatpak
-          key: full-stack-2026-07-16-linux-x86_64
+          key: full-stack-openscad-2026.06.12-linux-x86_64
       - name: Install and verify the pinned full stack
         run: scripts/setup-linux.sh
       - run: xvfb-run -a uv run pytest tests/ -v

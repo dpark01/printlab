@@ -216,6 +216,7 @@ def test_geometry_comparison_welds_stl_vertices(tmp_path: Path) -> None:
     ("output", "expected"),
     [
         ("OpenSCAD version 2021.01\n", "2021.01"),
+        ("OpenSCAD version 2026.06.12\n", "2026.06.12"),
         ("FreeCAD 1.1.1, Libs: 1.1.1R12345 (Git)\n", "1.1.1"),
     ],
 )
