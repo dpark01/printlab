@@ -143,7 +143,7 @@ if [ ! -x "$CALCULIX_DIR/ccx_2.23" ]; then
         "https://www.netlib.org/linalg/spooles/spooles.2.2.tgz" \
         "$CALCULIX_BUILD_DIR/spooles.2.2.tgz" \
         "a84559a0e987a1e423055ef4fdf3035d55b65bbe4bf915efaa1a35bef7f8c5dd"
-    tar -xjf "$CALCULIX_BUILD_DIR/ccx_2.23.src.tar.bz2" -C "$CALCULIX_BUILD_DIR"
+    tar -xjf "$CALCULIX_BUILD_DIR/ccx_2.23.src.tar.bz2" -C "$CALCULIX_BUILD_DIR" --strip-components=2
     mkdir "$CALCULIX_BUILD_DIR/spooles"
     tar -xzf "$CALCULIX_BUILD_DIR/spooles.2.2.tgz" -C "$CALCULIX_BUILD_DIR/spooles"
     sed -i 's#/usr/lang-4.0/bin/cc#gcc#' "$CALCULIX_BUILD_DIR/spooles/Make.inc"
