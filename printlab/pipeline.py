@@ -16,13 +16,13 @@ import os
 import shutil
 import tomllib
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
 
-from printlab.cad import build_part, export_step, export_stl
+from printlab.cad import CadBuildRequest, get_cad_backend
 from printlab.cad.probe import classify_points, load_solid
 from printlab.determinism import hash_artifact, hash_file
 from printlab.evaluation import evaluate as evaluate_printability
@@ -88,12 +88,19 @@ class PipelineError(RuntimeError):
 class PartConfig:
     name: str
     example_dir: Path
-    part_py: Path
-    build_function: str
+    source_path: Path
     printer_profile_path: Path
     material_profile_path: Path
     process_profile_path: Path
+    cad_backend: str = "cadquery"
+    build_function: str | None = "build"
+    cad_options: dict = field(default_factory=dict)
     fea_load_case: FEALoadCase | None = None
+
+    @property
+    def part_py(self) -> Path:
+        """Compatibility alias for callers written against the CadQuery-only API."""
+        return self.source_path
 
 
 #: Shown verbatim in load_part_config's missing-toml error, and used to
@@ -138,11 +145,17 @@ def load_part_config(example_dir: Path, *, repo_root: Path | None = None) -> Par
     part = data["part"]
     profiles = data["profiles"]
     fea_table = data.get("fea")
+    cad_backend = part.get("cad_backend", "cadquery")
+    source = part.get("source", part.get("module"))
+    if source is None:
+        raise PipelineError("[part] must define `source` (or legacy `module`)")
     return PartConfig(
         name=part["name"],
         example_dir=example_dir,
-        part_py=example_dir / part["module"],
-        build_function=part.get("function", "build"),
+        source_path=example_dir / source,
+        cad_backend=cad_backend,
+        build_function=part.get("function", "build") if cad_backend == "cadquery" else None,
+        cad_options=dict(part.get(cad_backend, {})),
         fea_load_case=FEALoadCase(**fea_table) if fea_table else None,
         printer_profile_path=repo_root / profiles["printer"],
         material_profile_path=repo_root / profiles["material"],
@@ -193,9 +206,10 @@ def load_profiles(config: PartConfig) -> tuple[PrinterProfile, MaterialProfile, 
 
 def _build_fingerprint(config: PartConfig) -> dict:
     return {
-        "cad_source_sha256": hash_file(config.part_py),
+        "cad_backend": config.cad_backend,
+        "cad_source_sha256": hash_file(config.source_path),
         "build_function": config.build_function,
-        "part_py": str(config.part_py),
+        "source_path": str(config.source_path),
     }
 
 
@@ -211,7 +225,7 @@ def build_is_fresh(config: PartConfig, output_dir: Path) -> bool:
     (forces a rebuild rather than risking a false "fresh").
     """
     fingerprint_path = Path(output_dir) / ARTIFACT_FILENAMES["build_fingerprint"]
-    if not fingerprint_path.is_file() or not config.part_py.is_file():
+    if not fingerprint_path.is_file() or not config.source_path.is_file():
         return False
     try:
         recorded = json.loads(fingerprint_path.read_text())
@@ -221,11 +235,17 @@ def build_is_fresh(config: PartConfig, output_dir: Path) -> bool:
 
 
 def stage_build(config: PartConfig, output_dir: Path) -> tuple[Path, Path]:
-    result = build_part(config.part_py, config.build_function)
-    step_path = export_step(result, output_dir / ARTIFACT_FILENAMES["step"])
-    stl_path = export_stl(result, output_dir / ARTIFACT_FILENAMES["stl"])
+    backend = get_cad_backend(config.cad_backend)
+    result = backend.build(
+        CadBuildRequest(
+            source_path=config.source_path,
+            output_dir=output_dir,
+            build_target=config.build_function,
+            options=config.cad_options,
+        )
+    )
     _write_json_atomic_raw(output_dir / ARTIFACT_FILENAMES["build_fingerprint"], _build_fingerprint(config))
-    return step_path, stl_path
+    return result.step_path, result.stl_path
 
 
 def stage_mesh(stl_path: Path, output_dir: Path) -> MeshReport:
@@ -484,7 +504,7 @@ def run_all(
     )
     if slice_result.status.value == "error":
         manifest = build_run_manifest(
-            input_hashes=hash_inputs({"cad_source": config.part_py, "stl": stl_path}),
+            input_hashes=hash_inputs({"cad_source": config.source_path, "stl": stl_path}),
             profile_hashes=hash_inputs(
                 {
                     "printer": config.printer_profile_path,
@@ -503,7 +523,7 @@ def run_all(
 
     manifest = build_run_manifest(
         tool_versions={backend_name: slice_result.backend_version},
-        input_hashes=hash_inputs({"cad_source": config.part_py, "stl": stl_path}),
+        input_hashes=hash_inputs({"cad_source": config.source_path, "stl": stl_path}),
         profile_hashes=hash_inputs(
             {
                 "printer": config.printer_profile_path,
@@ -566,7 +586,7 @@ def run_check(
     printability = stage_evaluate(mesh, None, output_dir, printer=printer)
 
     manifest = build_run_manifest(
-        input_hashes=hash_inputs({"cad_source": config.part_py, "stl": stl_path}),
+        input_hashes=hash_inputs({"cad_source": config.source_path, "stl": stl_path}),
         profile_hashes=hash_inputs(
             {
                 "printer": config.printer_profile_path,

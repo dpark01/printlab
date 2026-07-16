@@ -100,7 +100,7 @@ def optimize(
     """
     example_dir = Path(example_dir)
     config = pipeline.load_part_config(example_dir)
-    original_source = config.part_py.read_text()
+    original_source = config.source_path.read_text()
     current_source = original_source
 
     history: list[IterationRecord] = []
@@ -147,10 +147,10 @@ def optimize(
                 stop_reason = "propose_edit returned None (no further edit proposed)"
                 break
 
-            config.part_py.write_text(new_source)
+            config.source_path.write_text(new_source)
             current_source = new_source
     finally:
-        config.part_py.write_text(original_source)
+        config.source_path.write_text(original_source)
 
     return OptimizeResult(
         example_dir=example_dir,

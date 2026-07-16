@@ -14,7 +14,7 @@ import cadquery as cq
 import pytest
 
 from printlab import pipeline
-from printlab.cad import export_step
+from printlab.cad import CadBuildResult, export_step, export_stl
 from printlab.determinism import hash_file
 
 
@@ -24,12 +24,25 @@ def _make_config(tmp_path: Path, *, build_function: str = "build") -> pipeline.P
     return pipeline.PartConfig(
         name="widget",
         example_dir=tmp_path,
-        part_py=part_py,
-        build_function=build_function,
+        source_path=part_py,
         printer_profile_path=tmp_path / "printer.yaml",
         material_profile_path=tmp_path / "material.yaml",
         process_profile_path=tmp_path / "process.yaml",
+        build_function=build_function,
     )
+
+
+def _fake_backend():
+    class FakeBackend:
+        def build(self, request):
+            shape = cq.Workplane("XY").box(1, 1, 1)
+            return CadBuildResult(
+                backend_name="cadquery",
+                step_path=export_step(shape, request.output_dir / "part.step"),
+                stl_path=export_stl(shape, request.output_dir / "part.stl"),
+            )
+
+    return FakeBackend()
 
 
 class TestBuildIsFresh:
@@ -45,10 +58,7 @@ class TestBuildIsFresh:
         output_dir = tmp_path / "output"
         output_dir.mkdir()
 
-        def fake_build_part(part_py, function_name):
-            return cq.Workplane("XY").box(1, 1, 1)
-
-        monkeypatch.setattr(pipeline, "build_part", fake_build_part)
+        monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: _fake_backend())
         pipeline.stage_build(config, output_dir)
 
         assert pipeline.build_is_fresh(config, output_dir) is True
@@ -57,9 +67,7 @@ class TestBuildIsFresh:
         config = _make_config(tmp_path)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        monkeypatch.setattr(
-            pipeline, "build_part", lambda part_py, function_name: cq.Workplane("XY").box(1, 1, 1)
-        )
+        monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: _fake_backend())
         pipeline.stage_build(config, output_dir)
 
         config.part_py.write_text("def build():\n    pass  # edited\n")
@@ -70,9 +78,7 @@ class TestBuildIsFresh:
         config = _make_config(tmp_path)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        monkeypatch.setattr(
-            pipeline, "build_part", lambda part_py, function_name: cq.Workplane("XY").box(1, 1, 1)
-        )
+        monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: _fake_backend())
         pipeline.stage_build(config, output_dir)
 
         other_config = replace(config, build_function="build_closed")

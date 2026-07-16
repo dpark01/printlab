@@ -45,9 +45,10 @@ def _fake_build(calls: list):
         pipeline._write_json_atomic_raw(
             output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"],
             {
+                "cad_backend": config.cad_backend,
                 "cad_source_sha256": f"fake-hash-for-{config.build_function}",
                 "build_function": config.build_function,
-                "part_py": str(config.part_py),
+                "source_path": str(config.source_path),
             },
         )
         return step, stl
@@ -81,11 +82,7 @@ def test_ensure_built_skips_when_fresh(tmp_path, monkeypatch):
     config = pipeline.load_part_config(tmp_path)
     (output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"]).write_text(
         json.dumps(
-            {
-                "cad_source_sha256": hash_file(config.part_py),
-                "build_function": config.build_function,
-                "part_py": str(config.part_py),
-            }
+            pipeline._build_fingerprint(config)
         )
     )
 
@@ -129,9 +126,10 @@ def test_ensure_built_rebuilds_when_function_override_differs_from_recorded_buil
     (output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"]).write_text(
         json.dumps(
             {
+                "cad_backend": config.cad_backend,
                 "cad_source_sha256": hash_file(config.part_py),
                 "build_function": "build",
-                "part_py": str(config.part_py),
+                "source_path": str(config.source_path),
             }
         )
     )
@@ -283,11 +281,7 @@ def test_printlab_render_reports_rebuilt_false_when_build_is_fresh(tmp_path, mon
     config = pipeline.load_part_config(tmp_path)
     (output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"]).write_text(
         json.dumps(
-            {
-                "cad_source_sha256": hash_file(config.part_py),
-                "build_function": config.build_function,
-                "part_py": str(config.part_py),
-            }
+            pipeline._build_fingerprint(config)
         )
     )
     calls: list = []

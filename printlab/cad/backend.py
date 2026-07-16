@@ -18,6 +18,8 @@ from pathlib import Path
 
 import cadquery as cq
 
+from printlab.cad.base import CadBackend, CadBuildError, CadBuildRequest, CadBuildResult
+
 #: Pinned explicitly rather than left at cadquery's default, so a future
 #: cadquery/OCCT upgrade changing its default can't silently change our
 #: tessellation without a deliberate profile bump.
@@ -31,7 +33,7 @@ class ExportSettings:
     angular_deflection_rad: float = DEFAULT_ANGULAR_DEFLECTION_RAD
 
 
-class PartBuildError(RuntimeError):
+class PartBuildError(CadBuildError):
     """Raised when a part module can't be loaded or its build() call fails."""
 
 
@@ -110,3 +112,26 @@ def export_stl(
         unit="MM",
     )
     return path
+
+
+class CadQueryBackend(CadBackend):
+    """Build a Python CadQuery module through the generic CAD contract."""
+
+    name = "cadquery"
+
+    def build(self, request: CadBuildRequest) -> CadBuildResult:
+        build_target = request.build_target or "build"
+        result = build_part(request.source_path, build_target)
+        step_path = export_step(result, request.output_dir / "part.step")
+        stl_path = export_stl(result, request.output_dir / "part.stl")
+        return CadBuildResult(
+            backend_name=self.name,
+            step_path=step_path,
+            stl_path=stl_path,
+            dependencies=(request.source_path,),
+            settings={
+                "build_target": build_target,
+                "linear_deflection_mm": DEFAULT_LINEAR_DEFLECTION_MM,
+                "angular_deflection_rad": DEFAULT_ANGULAR_DEFLECTION_RAD,
+            },
+        )
