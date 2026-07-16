@@ -87,7 +87,9 @@ else
     flatpak install --user --noninteractive flathub com.prusa3d.PrusaSlicer/x86_64/stable
 fi
 flatpak update --user --noninteractive --commit="$PRUSA_COMMIT" com.prusa3d.PrusaSlicer/x86_64/stable
-printf '%s\n' '#!/usr/bin/env bash' 'exec flatpak run com.prusa3d.PrusaSlicer "$@"' > "$BIN_DIR/prusa-slicer"
+printf '%s\n' '#!/usr/bin/env bash' \
+    'exec flatpak run --filesystem=host --filesystem=/tmp com.prusa3d.PrusaSlicer "$@"' \
+    > "$BIN_DIR/prusa-slicer"
 chmod +x "$BIN_DIR/prusa-slicer"
 
 echo "==> Installing Bambu Studio 02.07.01.62"
