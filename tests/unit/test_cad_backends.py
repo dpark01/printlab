@@ -90,3 +90,14 @@ def test_config_rejects_unknown_cad_backend(tmp_path: Path) -> None:
 
     with pytest.raises(pipeline.PipelineError, match="unknown CAD backend"):
         pipeline.load_part_config(tmp_path, repo_root=tmp_path)
+
+
+def test_build_function_override_rejects_openscad(tmp_path: Path) -> None:
+    _write_profiles_config(
+        tmp_path,
+        '[part]\nname = "widget"\ncad_backend = "openscad"\nsource = "part.scad"\n',
+    )
+    config = pipeline.load_part_config(tmp_path, repo_root=tmp_path)
+
+    with pytest.raises(pipeline.PipelineError, match="only valid for the cadquery backend"):
+        pipeline.override_build_function(config, "build")

@@ -40,9 +40,9 @@ class PartBuildError(CadBuildError):
 def load_build_function(part_py: Path, function_name: str = "build") -> Callable[[], cq.Workplane]:
     """Dynamically import an example's part.py and return its build() callable.
 
-    Each example directory owns a `part.py` defining `build() -> cq.Workplane`.
-    This is the *only* CAD source an agent should ever edit (SETUP.md's
-    AGENTS.md rule: "edit only CAD source, never edit generated artifacts").
+    A CadQuery example owns a `.py` source defining `build() -> cq.Workplane`.
+    This is the durable CAD source an agent may edit; generated output remains
+    off limits (see AGENTS.md).
     """
     part_py = Path(part_py)
     if not part_py.is_file():

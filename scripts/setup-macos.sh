@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Set up PrintLab's full toolchain on macOS: Python deps via uv, plus the
-# native slicers pinned in tools.toml. See docs/environment.md for the
+# native slicers and CAD tools pinned in tools.toml. See docs/environment.md for the
 # three-layer reproducibility model this script implements layer 2 of.
 set -euo pipefail
 
@@ -11,6 +11,9 @@ uv sync
 
 echo "==> Installing native slicers (Homebrew casks)"
 brew install --cask prusaslicer bambu-studio orcaslicer
+
+echo "==> Installing OpenSCAD and FreeCAD (Homebrew casks)"
+brew install --cask openscad freecad
 
 echo "==> Installing CalculiX (ccx) FEA solver (Homebrew tap)"
 # Ships a version-suffixed binary (e.g. ccx_2.23), not a bare 'ccx' -- printlab

@@ -350,6 +350,18 @@ def test_printlab_init_scaffolds_toml_pointing_at_existing_module(tmp_path):
     assert config.fea_load_case is None
 
 
+def test_printlab_init_scaffolds_openscad_source(tmp_path):
+    (tmp_path / "part.scad").write_text("cube([1, 1, 1]);\n")
+
+    written = tools.printlab_init(str(tmp_path), source="part.scad", cad_backend="openscad")
+
+    assert Path(written) == tmp_path / "printlab.toml"
+    config = pipeline.load_part_config(tmp_path, repo_root=tmp_path)
+    assert config.cad_backend == "openscad"
+    assert config.source_path == tmp_path / "part.scad"
+    assert config.build_function is None
+
+
 def test_printlab_init_refuses_to_overwrite_existing_toml(tmp_path):
     (tmp_path / "part.py").write_text("def build():\n    ...\n")
     tools.printlab_init(str(tmp_path))
@@ -369,6 +381,8 @@ def test_printlab_describe_reports_resolved_config(tmp_path):
     described = tools.printlab_describe(str(tmp_path))
 
     assert described["name"] == "widget"
+    assert described["cad_backend"] == "cadquery"
+    assert described["source_path"] == str(tmp_path / "part.py")
     assert described["part_py"] == str(tmp_path / "part.py")
     assert described["build_function"] == "build"
     assert described["fea_configured"] is False
@@ -536,3 +550,4 @@ def test_printlab_doctor_reports_repo_root():
     result = tools.printlab_doctor()
     assert "repo_root" in result
     assert Path(result["repo_root"]).is_absolute()
+    assert {tool["tool"] for tool in result["cad_tools"]} == {"openscad", "freecad"}

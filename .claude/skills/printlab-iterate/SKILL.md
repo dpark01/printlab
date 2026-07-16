@@ -31,8 +31,9 @@ Slicer availability:
 4. **Look at it.** Run
    `uv run printlab render examples/<name> --view iso --view front --view top`
    and view the `render_*.png` files.
-5. **Propose a CAD edit** to `examples/<name>/part.py` ONLY (never edit
-   output/).
+5. **Propose a CAD edit** to the `[part].source` path from
+   `examples/<name>/printlab.toml` (`part.py` for CadQuery or `part.scad` for
+   OpenSCAD) ONLY. Never edit `output/`.
 6. **Rerun** the same command and **compare metrics numerically** -- e.g.
    "raised min_wall_thickness_mm 0.24->0.81, flipped min_wall_thickness to
    PASS."

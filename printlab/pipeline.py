@@ -110,7 +110,8 @@ class PartConfig:
 _MISSING_TOML_EXAMPLE = """\
 [part]
 name = "my_part"
-module = "part.py"
+cad_backend = "cadquery"
+source = "part.py"
 function = "build"
 
 [profiles]
@@ -169,6 +170,17 @@ def load_part_config(example_dir: Path, *, repo_root: Path | None = None) -> Par
         material_profile_path=repo_root / profiles["material"],
         process_profile_path=repo_root / profiles["process"],
     )
+
+
+def override_build_function(config: PartConfig, build_function: str | None) -> PartConfig:
+    """Apply a one-call CadQuery build-function override."""
+    if build_function is None:
+        return config
+    if config.cad_backend != "cadquery":
+        raise PipelineError(
+            f"build-function overrides are only valid for the cadquery backend, not {config.cad_backend}"
+        )
+    return replace(config, build_function=build_function)
 
 
 def default_output_dir(config: PartConfig, backend_name: str) -> Path:
@@ -584,9 +596,7 @@ def run_all(
     only (issue #5.4) -- e.g. to check an alternate builder in the same CAD
     module without editing the config file back and forth.
     """
-    config = load_part_config(example_dir)
-    if build_function is not None:
-        config = replace(config, build_function=build_function)
+    config = override_build_function(load_part_config(example_dir), build_function)
     output_dir = Path(output_dir) if output_dir else default_output_dir(config, backend_name)
     prepare_output_dir(output_dir, clean=True)
 
@@ -672,9 +682,7 @@ def run_check(
     `build_function` overrides printlab.toml's `[part].function` for this call
     only -- see run_all's matching parameter (issue #5.4).
     """
-    config = load_part_config(example_dir)
-    if build_function is not None:
-        config = replace(config, build_function=build_function)
+    config = override_build_function(load_part_config(example_dir), build_function)
     output_dir = Path(output_dir) if output_dir else default_output_dir(config, "check")
     prepare_output_dir(output_dir, clean=True)
 

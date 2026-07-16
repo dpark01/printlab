@@ -21,11 +21,11 @@ A `requirements.txt` is also committed (generated via `uv export
 --no-hashes -o requirements.txt`) for plain-`pip` installs. It's a derived
 file — regenerate it whenever `uv.lock` changes; don't hand-edit it.
 
-## Layer 2: Native slicers
+## Layer 2: Native tools
 
-Slicer binaries can't live in a Python lockfile. `tools.toml` declares the
-pinned version of each; `printlab doctor` compares your installed versions
-against those pins:
+Slicer and external CAD binaries can't live in a Python lockfile. `tools.toml`
+declares the pinned version of each; `printlab doctor` compares your installed
+versions against those pins:
 
 ```bash
 uv run printlab doctor
@@ -37,10 +37,12 @@ each run's `run_manifest.json` matches across runs/machines you're comparing.
 
 **Setup:**
 
-- macOS: `scripts/setup-macos.sh` (installs all three slicers via Homebrew casks)
+- macOS: `scripts/setup-macos.sh` (installs all three slicers plus OpenSCAD and
+  FreeCAD via Homebrew casks)
 - Linux: `scripts/setup-linux.sh` (PrusaSlicer via Flatpak — it publishes no
   Linux binary on GitHub releases; Bambu Studio and OrcaSlicer via pinned
-  AppImage URLs)
+  AppImage URLs; OpenSCAD via the distribution package; pinned FreeCAD via its
+  official x86_64/aarch64 AppImage)
 
 **Why Bambu Studio's (and OrcaSlicer's) native profile resolution is not
 fully self-contained:** their preset JSON files use an `inherits` chain
@@ -62,10 +64,15 @@ up under direct testing — but it bundles a substantially broader vendor
 profile library while remaining Bambu-compatible, which is a real, verified
 reason to keep both around rather than picking one.
 
-## Layer 3: CAD software
+## Layer 3: CAD source backends
 
-CadQuery is a Python library, so it's covered by layer 1. A future non-Python
-CAD backend (OpenSCAD, FreeCAD) would join layer 2 instead.
+CadQuery is a Python library, so it is covered by layer 1. OpenSCAD source uses
+the layer-2 `openscad` executable, then FreeCAD as a strict CSG-to-B-rep STEP
+bridge. The bridge rejects FreeCAD mesh/placeholder fallbacks, requires exactly
+one valid closed solid, and compares the canonical OCP tessellation against an
+OpenSCAD reference STL before accepting the build. Actual versions and
+comparison metrics are recorded in `cad_build_report.json`; the native versions
+also participate in build freshness and `run_manifest.json` provenance.
 
 ## What's deliberately out of scope for v0.1
 

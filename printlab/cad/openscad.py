@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -28,7 +29,9 @@ _OPENSCAD_CANDIDATES = (
 )
 _FREECAD_CANDIDATES = (
     "/Applications/FreeCAD.app/Contents/Resources/bin/FreeCADCmd",
+    "/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd",
     "/Applications/FreeCAD.app/Contents/MacOS/FreeCADCmd",
+    "/Applications/FreeCAD.app/Contents/MacOS/freecadcmd",
 )
 
 
@@ -70,14 +73,41 @@ def detect_binary_version(binary: Path, *, timeout: float = 10.0) -> str:
             code="version_detection_failed",
             context={"binary": str(binary)},
         ) from exc
-    version = (result.stdout or result.stderr).strip().splitlines()
-    if result.returncode != 0 or not version:
+    output = "\n".join(part for part in (result.stdout, result.stderr) if part).strip()
+    if result.returncode != 0 or not output:
         raise CadBuildError(
             f"could not query {binary.name} version",
             code="version_detection_failed",
             context={"binary": str(binary), "returncode": result.returncode},
         )
-    return version[0]
+    for pattern in (r"OpenSCAD version\s+([^\s]+)", r"FreeCAD\s+([^,\s]+)"):
+        match = re.search(pattern, output, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return output.splitlines()[0]
+
+
+def detect_openscad_toolchain() -> dict[str, dict[str, str | bool | None]]:
+    """Report the two native tools required by the OpenSCAD backend."""
+    detected: dict[str, dict[str, str | bool | None]] = {}
+    for name, finder in (("openscad", find_openscad_binary), ("freecad", find_freecadcmd_binary)):
+        binary = finder()
+        if binary is None:
+            detected[name] = {"available": False, "version": None, "binary": None, "notes": "not found"}
+            continue
+        try:
+            version = detect_binary_version(binary)
+            notes = ""
+        except CadBuildError as exc:
+            version = None
+            notes = str(exc)
+        detected[name] = {
+            "available": True,
+            "version": version,
+            "binary": str(binary),
+            "notes": notes,
+        }
+    return detected
 
 
 def _serialize_define(value: Any) -> str:
@@ -127,13 +157,18 @@ def _run(command: list[str], *, cwd: Path, timeout: float, env: dict[str, str] |
 
 
 def _run_bridge(
-    command: list[str], *, cwd: Path, timeout: float, env: dict[str, str]
+    command: list[str], *, script_path: Path, cwd: Path, timeout: float, env: dict[str, str]
 ) -> subprocess.CompletedProcess[str]:
+    script = (
+        f"exec(compile(open({str(script_path)!r}, encoding='utf-8').read(), "
+        f"{str(script_path)!r}, 'exec'))\n"
+    )
     try:
         return subprocess.run(
             command,
             cwd=cwd,
             env=env,
+            input=script,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -172,7 +207,7 @@ def _parse_dependencies(path: Path, source_dir: Path, source_path: Path) -> tupl
 
 
 def _load_mesh(path: Path) -> trimesh.Trimesh:
-    mesh = trimesh.load(path, force="mesh", process=False)
+    mesh = trimesh.load(path, force="mesh", process=True)
     if not isinstance(mesh, trimesh.Trimesh) or mesh.is_empty:
         raise CadBuildError(f"invalid or empty mesh: {path}", code="invalid_mesh")
     return mesh
@@ -300,10 +335,12 @@ class OpenSCADBackend(CadBackend):
                         code="missing_cad_output",
                     )
 
+            freecad_user_home = temp_dir / "freecad-home"
+            freecad_user_home.mkdir()
             bridge_env = os.environ.copy()
             bridge_env.update(
                 {
-                    "FREECAD_USER_HOME": str(temp_dir / "freecad-home"),
+                    "FREECAD_USER_HOME": str(freecad_user_home),
                     "PRINTLAB_CSG_PATH": str(csg_path),
                     "PRINTLAB_STEP_PATH": str(temporary_step),
                     "PRINTLAB_BRIDGE_METADATA_PATH": str(bridge_metadata_path),
@@ -315,8 +352,8 @@ class OpenSCADBackend(CadBackend):
                     str(freecadcmd),
                     "--user-cfg",
                     str(temp_dir / "freecad-user.cfg"),
-                    str(bridge_script),
                 ],
+                script_path=bridge_script,
                 cwd=temp_dir,
                 timeout=timeout,
                 env=bridge_env,

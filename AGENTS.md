@@ -7,7 +7,9 @@ read the pipeline's output and propose changes to CAD source in response.
 
 ## Operating rules
 
-- **Edit only CAD source** (`examples/*/part.py`). Never hand-edit anything
+- **Edit only configured CAD source** (`[part].source`, usually
+  `examples/*/part.py` or `examples/*/part.scad`, plus source-language include
+  files). Never hand-edit anything
   under an `output/` directory — every file there is generated and will be
   silently overwritten (and `printlab all` deletes the output directory
   clean before regenerating it — see `printlab.pipeline.prepare_output_dir`).
@@ -54,7 +56,8 @@ read the pipeline's output and propose changes to CAD source in response.
 - **The sanctioned agent loop is `scripts/optimize_loop.py`, not an ad hoc
   edit/rerun cycle.** It implements `repeat: edit CAD -> build -> evaluate
   -> compare -> until the metric stops improving` as a pluggable
-  `propose_edit(source, last_result) -> str | None` callback around
+  `propose_edit(source, last_result) -> str | None` callback around the
+  configured CadQuery or OpenSCAD source file and
   `printlab.pipeline.run_check`/`run_all`, with a documented stopping rule
   (no ERROR-level check remains and the target metric hasn't improved for
   `patience` iterations, or the proposer returns `None`, or `max_iters` is

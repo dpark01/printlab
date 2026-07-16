@@ -6,6 +6,7 @@ from pathlib import Path
 
 import cadquery as cq
 import pytest
+import trimesh
 
 from printlab.cad import CadBuildError, CadBuildRequest
 from printlab.cad import openscad as openscad_module
@@ -21,8 +22,8 @@ def _request(tmp_path: Path, *, options: dict | None = None) -> CadBuildRequest:
 
 
 def _successful_run(calls: list):
-    def run(command, *, cwd, timeout, env=None):
-        calls.append((command, cwd, timeout, env))
+    def run(command, *, cwd, timeout, env=None, script_path=None):
+        calls.append((command, cwd, timeout, env, script_path))
         if Path(command[0]).name == "openscad":
             output_indices = [index + 1 for index, value in enumerate(command) if value == "-o"]
             Path(command[output_indices[0]]).write_text("group() { cube(size = [10, 20, 30]); }\n")
@@ -103,7 +104,7 @@ def test_build_runs_openscad_then_freecad_and_emits_step_stl(tmp_path: Path, mon
     assert openscad_command[-1] == str(request.source_path.resolve())
     assert ["-D", 'label="A"'] == openscad_command[openscad_command.index("-D") :][:2]
     assert ["-D", "width=12"] == openscad_command[openscad_command.index("-D", 4) :][-3:-1]
-    assert Path(calls[1][0][-1]).name == "freecad_bridge.py"
+    assert calls[1][4].name == "freecad_bridge.py"
     assert "--user-cfg" in calls[1][0]
     assert calls[1][3]["FREECAD_USER_HOME"].endswith("freecad-home")
 
@@ -113,8 +114,8 @@ def test_build_rejects_freecad_mesh_fallback(tmp_path: Path, monkeypatch) -> Non
     _patch_success(monkeypatch, calls)
     original_run = openscad_module._run_bridge
 
-    def run_with_fallback(command, *, cwd, timeout, env):
-        result = original_run(command, cwd=cwd, timeout=timeout, env=env)
+    def run_with_fallback(command, *, script_path, cwd, timeout, env):
+        result = original_run(command, script_path=script_path, cwd=cwd, timeout=timeout, env=env)
         Path(env["PRINTLAB_BRIDGE_METADATA_PATH"]).write_text(
             json.dumps(
                 {
@@ -137,7 +138,7 @@ def test_build_surfaces_freecad_bridge_metadata_on_failure(tmp_path: Path, monke
     calls = []
     _patch_success(monkeypatch, calls)
 
-    def failed_bridge(command, *, cwd, timeout, env):
+    def failed_bridge(command, *, script_path, cwd, timeout, env):
         Path(env["PRINTLAB_BRIDGE_METADATA_PATH"]).write_text(
             json.dumps({"status": "error", "error": "invalid CSG token"})
         )
@@ -171,6 +172,61 @@ def test_run_translates_timeout_to_structured_error(tmp_path: Path, monkeypatch)
         openscad_module._run(["openscad"], cwd=tmp_path, timeout=1)
 
     assert exc_info.value.code == "cad_build_timeout"
+
+
+def test_run_bridge_executes_script_through_freecad_stdin(tmp_path: Path, monkeypatch) -> None:
+    script_path = tmp_path / "bridge.py"
+    script_path.write_text("print('bridge ran')\n")
+    captured = {}
+
+    def run(command, **kwargs):
+        captured.update(kwargs)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(openscad_module.subprocess, "run", run)
+
+    openscad_module._run_bridge(
+        ["FreeCADCmd", "--user-cfg", "user.cfg"],
+        script_path=script_path,
+        cwd=tmp_path,
+        timeout=10,
+        env={},
+    )
+
+    assert "exec(compile(open(" in captured["input"]
+    assert str(script_path) in captured["input"]
+
+
+def test_geometry_comparison_welds_stl_vertices(tmp_path: Path) -> None:
+    reference = tmp_path / "reference.stl"
+    candidate = tmp_path / "candidate.stl"
+    mesh = trimesh.creation.box(extents=(10, 20, 30))
+    mesh.export(reference)
+    mesh.export(candidate)
+
+    comparison = openscad_module._compare_geometry(reference, candidate)
+
+    assert comparison["reference_watertight"] is True
+    assert comparison["candidate_watertight"] is True
+    assert comparison["reference_components"] == 1
+    assert comparison["candidate_components"] == 1
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ("OpenSCAD version 2021.01\n", "2021.01"),
+        ("FreeCAD 1.1.1, Libs: 1.1.1R12345 (Git)\n", "1.1.1"),
+    ],
+)
+def test_detect_binary_version_normalizes_native_output(output, expected, monkeypatch) -> None:
+    monkeypatch.setattr(
+        openscad_module.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args[0], 0, output, ""),
+    )
+
+    assert openscad_module.detect_binary_version(Path("/bin/tool")) == expected
 
 
 @pytest.mark.parametrize(
