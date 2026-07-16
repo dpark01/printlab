@@ -407,7 +407,13 @@ _BACKEND_TOOL_KEY = {"prusaslicer": "prusaslicer", "bambu": "bambustudio"}
 
 
 @app.command()
-def doctor() -> None:
+def doctor(
+    strict: bool = typer.Option(
+        False,
+        "--strict",
+        help="Exit non-zero if any pinned native tool is missing, mismatched, or unreadable.",
+    ),
+) -> None:
     """Compare installed native toolchain versions against tools.toml's pins.
 
     A clean `doctor` run does not by itself guarantee Tier-1 reproducibility
@@ -421,6 +427,7 @@ def doctor() -> None:
         typer.echo(f"warning: {exc}", err=True)
         pinned = {}
 
+    has_issues = False
     capabilities = detect_all()
     for name in available_backend_names():
         cap = capabilities[name]
@@ -428,8 +435,10 @@ def doctor() -> None:
         pinned_version = pin.get("version")
 
         if not cap.available:
+            has_issues = True
             typer.echo(f"[MISSING] {name}: not installed (pinned version: {pinned_version or 'n/a'})")
         elif pinned_version and cap.version != pinned_version:
+            has_issues = True
             typer.echo(f"[WARN]    {name}: installed={cap.version}, pinned={pinned_version}")
         else:
             typer.echo(f"[OK]      {name}: {cap.version or 'unknown'}")
@@ -439,10 +448,13 @@ def doctor() -> None:
     for name, cap in detect_openscad_toolchain().items():
         pinned_version = pinned.get(name, {}).get("version")
         if not cap["available"]:
+            has_issues = True
             typer.echo(f"[MISSING] {name}: not installed (pinned version: {pinned_version or 'n/a'})")
         elif cap["version"] is None:
+            has_issues = True
             typer.echo(f"[WARN]    {name}: installed, version unavailable")
         elif pinned_version and cap["version"] != pinned_version:
+            has_issues = True
             typer.echo(f"[WARN]    {name}: installed={cap['version']}, pinned={pinned_version}")
         else:
             typer.echo(f"[OK]      {name}: {cap['version']}")
@@ -455,13 +467,18 @@ def doctor() -> None:
     ccx_binary = find_ccx_binary()
     ccx_pinned_version = pinned.get("calculix", {}).get("version")
     if ccx_binary is None:
+        has_issues = True
         typer.echo(f"[MISSING] calculix: not installed (pinned version: {ccx_pinned_version or 'n/a'})")
     else:
         ccx_version = detect_ccx_version(ccx_binary)
         if ccx_pinned_version and ccx_version != ccx_pinned_version:
+            has_issues = True
             typer.echo(f"[WARN]    calculix: installed={ccx_version}, pinned={ccx_pinned_version}")
         else:
             typer.echo(f"[OK]      calculix: {ccx_version or 'unknown'}")
+
+    if strict and has_issues:
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

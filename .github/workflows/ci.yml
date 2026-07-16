@@ -22,64 +22,23 @@ jobs:
       - run: uv run pytest tests/unit -v
 
   heavy:
-    name: heavy (full suite + real CAD build)
+    name: heavy (full stack + integration suite)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
         with:
           version: "0.11.27"
-      # Mandatory, not best-effort: examples/canoe engraves text via
-      # CadQuery/OCCT with font="Arial", which doesn't exist on Linux by
-      # default and isn't gated by any capability-skip (unlike ccx/gmsh
-      # below) -- OCCT's font lookup for a genuinely missing font crashes
-      # the process outright rather than raising a catchable Python
-      # exception, which surfaced as a bare "The operation was canceled"
-      # with no traceback partway through the canoe golden test. Debian's
-      # fontconfig-config ships standard metric-alias substitution rules
-      # that resolve "Arial" requests to Liberation Sans once
-      # fonts-liberation is installed -- the same mechanism LibreOffice/
-      # browsers rely on for Linux "Arial" compatibility.
-      - run: sudo apt-get update && sudo apt-get install -y fontconfig fonts-liberation openscad
-      - name: Cache pinned FreeCAD AppImage
+      - name: Cache pinned native toolchain
         uses: actions/cache@v4
         with:
-          path: ~/.cache/printlab/FreeCAD_1.1.1-Linux-x86_64-py311.AppImage
-          key: freecad-1.1.1-linux-x86_64
-      - name: Install pinned FreeCAD command-line tools
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.cache/printlab" "$RUNNER_TEMP/freecad-appimage"
-          appimage="$HOME/.cache/printlab/FreeCAD_1.1.1-Linux-x86_64-py311.AppImage"
-          if [ ! -f "$appimage" ]; then
-            curl -L -o "$appimage" "https://github.com/FreeCAD/FreeCAD/releases/download/1.1.1/FreeCAD_1.1.1-Linux-x86_64-py311.AppImage"
-          fi
-          echo "e2006138400b2fa85fa2e160e872d00767eb32964e85075830f7e198a3a876e1  $appimage" | sha256sum --check
-          chmod +x "$appimage"
-          (cd "$RUNNER_TEMP/freecad-appimage" && "$appimage" --appimage-extract >/dev/null)
-          appdir="$RUNNER_TEMP/freecad-appimage/squashfs-root"
-          printf '%s\n' '#!/usr/bin/env bash' 'exec "$(dirname "$0")/AppRun" freecadcmd "$@"' > "$appdir/FreeCADCmd"
-          chmod +x "$appdir/FreeCADCmd"
-          echo "$appdir" >> "$GITHUB_PATH"
-      # Unlike that font package, CalculiX/libGLU are genuinely best-effort:
-      # CalculiX is a small, GUI-free CLI solver that's normally
-      # apt-installable here, but if Ubuntu's package ever lags Debian's,
-      # tests/integration/test_fea_hook.py and test_mcp_smoke.py's FEA case
-      # self-skip via find_ccx_binary(), same as the slicer self-skip
-      # pattern below. libglu1-mesa is a separate, easy-to-miss requirement:
-      # gmsh's C extension dlopen()s libGLU at import time even though we
-      # only use its headless meshing API, never its GUI/OpenGL viewer --
-      # observed directly as an OSError ("libGLU.so.1: cannot open shared
-      # object file") on a bare runner; tests.conftest.skip_unless_importable
-      # treats that the same as gmsh being absent, so this is safe to let fail.
-      - run: sudo apt-get install -y calculix-ccx libglu1-mesa || true
-      - run: uv sync --extra fea --extra mcp
-      # No slicer is installed on this runner, so tests/integration's
-      # slicer-dependent cases self-skip via backend.detect().available
-      # (see printlab.slicing) -- this still exercises every deterministic
-      # code path, including the real CadQuery build, and -- when ccx
-      # installed above -- the real FEA/MCP paths too.
-      - run: uv run pytest tests/ -v
+          path: |
+            ~/.local/share/printlab/tools
+            ~/.local/share/flatpak
+          key: full-stack-2026-07-16-linux-x86_64
+      - name: Install and verify the pinned full stack
+        run: scripts/setup-linux.sh
+      - run: xvfb-run -a uv run pytest tests/ -v
       - name: Smoke-test the real CAD build (exercises CadQuery/OCP, not just fixtures)
         run: uv run printlab build examples/bracket --backend prusaslicer
       - name: Smoke-test the Benchy CAD import (exercises vendored STEP -> CadQuery)

@@ -17,8 +17,9 @@ follows when working in this repo.
 ## Quickstart
 
 ```bash
-uv sync                      # Python deps (CadQuery, trimesh, ...)
-uv run printlab doctor       # check native slicer/CAD versions against tools.toml
+scripts/setup-macos.sh        # macOS: complete Python + native stack
+# scripts/setup-linux.sh      # x86_64 apt-based Linux: same stack used by CI
+uv run printlab doctor --strict
 uv run printlab all examples/bracket --backend prusaslicer
 ```
 
@@ -42,8 +43,9 @@ the `fea` extra and CalculiX installed, `uv run printlab fea examples/hook`
 runs a rough linear-static structural estimate (see
 [`docs/fea.md`](docs/fea.md)).
 
-See [`docs/environment.md`](docs/environment.md) for full environment setup
-(macOS/Linux setup scripts, the three-layer reproducibility model).
+The setup scripts are the shared, pinned installation recipe for humans and
+the GitHub Actions heavy job. See [`docs/environment.md`](docs/environment.md)
+for prerequisites, platform support, and the three-layer reproducibility model.
 
 CAD source is selected independently from the slicer backend in
 `printlab.toml`. Existing `part.py` examples default to CadQuery; an OpenSCAD

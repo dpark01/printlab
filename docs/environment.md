@@ -34,15 +34,33 @@ uv run printlab doctor
 A clean `doctor` run is a pre-flight check, not the reproducibility contract
 itself — what actually matters is that the *resolved* version recorded in
 each run's `run_manifest.json` matches across runs/machines you're comparing.
+Use `doctor --strict` in setup and automation so missing, unreadable, or
+mismatched tools produce a non-zero exit status.
 
-**Setup:**
+**Prerequisite:** install uv 0.11.27, the same version pinned in CI. For
+example, Astral publishes a versioned installer at
+`https://astral.sh/uv/0.11.27/install.sh`. macOS also needs Homebrew only to
+build the pinned CalculiX formula when `ccx_2.23` is not already installed.
 
-- macOS: `scripts/setup-macos.sh` (installs all three slicers plus OpenSCAD and
-  FreeCAD via Homebrew casks)
-- Linux: `scripts/setup-linux.sh` (PrusaSlicer via Flatpak — it publishes no
-  Linux binary on GitHub releases; Bambu Studio and OrcaSlicer via pinned
-  AppImage URLs; OpenSCAD via the distribution package; pinned FreeCAD via its
-  official x86_64/aarch64 AppImage)
+**Full-stack setup:**
+
+- macOS: `scripts/setup-macos.sh` installs all Python extras and exact,
+  SHA-256-checked DMG releases for all three slicers, OpenSCAD, and FreeCAD in
+  `~/Applications`; it installs CalculiX from a formula pinned to a repository
+  commit whose source archives are themselves checksummed.
+- Linux/GitHub Actions: `scripts/setup-linux.sh` installs all Python extras,
+  PrusaSlicer from pinned application/runtime Flatpak commits, checksummed
+  AppImages for Bambu Studio, OrcaSlicer, OpenSCAD, and FreeCAD, and builds
+  CalculiX from checksummed sources. It writes every command-line entry point
+  under `~/.local/bin` and finishes with `doctor --strict`.
+- The full Linux stack is x86_64-only because the pinned Bambu Studio and
+  OpenSCAD releases do not provide Linux aarch64 artifacts. The installer
+  rejects unsupported architectures instead of silently producing a partial
+  environment.
+
+The GitHub Actions heavy job invokes `scripts/setup-linux.sh` directly and
+caches only the resulting pinned artifacts. This prevents the human and CI
+recipes from drifting apart.
 
 **Why Bambu Studio's (and OrcaSlicer's) native profile resolution is not
 fully self-contained:** their preset JSON files use an `inherits` chain
@@ -97,22 +115,21 @@ one real thing: pinning the OS/GL-shared-library layer that OCP/vtk link
 against at import time (undocumented today; CI's `ubuntu-latest` happens to
 have enough of it installed already).
 
-**Layer 2's slicers are the actual constraint, not layer 1:** Bambu Studio
-and OrcaSlicer publish only `ubuntu24.04` **x86_64** AppImages at the pinned
-versions in `tools.toml` -- no `linux/aarch64` build exists at all.
-PrusaSlicer has no Linux binary whatsoever on its GitHub releases (Flatpak
-is its only supported Linux channel, which is itself awkward inside Docker).
-So a container that bundles any of today's three slicers is realistically
-amd64-only; "multi-arch and contains a slicer" isn't simultaneously
-achievable with this slicer set.
+**Layer 2's native applications are the actual constraint, not layer 1:**
+Bambu Studio and OpenSCAD provide only **x86_64** Linux artifacts at the
+pinned versions. OrcaSlicer and FreeCAD do publish aarch64 artifacts, while
+PrusaSlicer has no Linux binary on its GitHub release and uses Flatpak. A
+container that bundles the complete current stack is therefore realistically
+amd64-only; "multi-arch and complete" isn't simultaneously achievable with
+this tool set.
 
 **If this is revisited:** the natural split is a multi-arch `printlab-core`
 image (layer 1 only, no slicer -- covers CAD build, mesh analysis,
 orientation search, evaluation, reporting on any arch) plus a separate
 amd64-only `printlab-full` image that adds PrusaSlicer (the reference/CI
-backend already used for golden reproducibility tests) -- bundling it would
-let CI finally *run* those tests instead of skipping them for lack of an
-installed slicer. Slic3r was evaluated and rejected as an alternative: it is
+backend already used for golden reproducibility tests). CI now installs the
+same full stack directly through `scripts/setup-linux.sh`; an image would
+primarily reduce setup time. Slic3r was evaluated and rejected as an alternative: it is
 PrusaSlicer's unmaintained ancestor (last release 1.3.0, May 2018),
 strictly worse and no more portable. A more promising path to a multi-arch
 *full* image is a time-boxed spike on **CuraEngine**: unlike the other three

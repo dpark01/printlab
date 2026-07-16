@@ -25,9 +25,13 @@ DEFAULT_MAX_RELATIVE_VOLUME_DELTA = 0.005
 DEFAULT_MAX_BBOX_DELTA_MM = 0.1
 
 _OPENSCAD_CANDIDATES = (
+    str(Path.home() / "Applications" / "OpenSCAD.app" / "Contents" / "MacOS" / "OpenSCAD"),
     "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD",
+    "/Applications/OpenSCAD-2021.01.app/Contents/MacOS/OpenSCAD",
 )
 _FREECAD_CANDIDATES = (
+    str(Path.home() / "Applications" / "FreeCAD.app" / "Contents" / "Resources" / "bin" / "FreeCADCmd"),
+    str(Path.home() / "Applications" / "FreeCAD.app" / "Contents" / "MacOS" / "FreeCADCmd"),
     "/Applications/FreeCAD.app/Contents/Resources/bin/FreeCADCmd",
     "/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd",
     "/Applications/FreeCAD.app/Contents/MacOS/FreeCADCmd",
