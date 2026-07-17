@@ -53,7 +53,9 @@ part uses `cad_backend = "openscad"` and `source = "part.scad"`. Because
 OpenSCAD cannot export STEP natively, PrintLab compiles CSG plus a reference
 STL, requires FreeCAD to translate the CSG into one valid B-rep solid, and
 rejects mesh fallbacks or geometry that differs from the OpenSCAD reference.
-See `examples/openscad-plate` for a complete configuration.
+See `examples/openscad-plate` for a complete configuration and
+[`docs/openscad.md`](docs/openscad.md) for the strict conversion contract,
+compatibility repairs, and actionable failure guidance.
 
 ## Pipeline
 

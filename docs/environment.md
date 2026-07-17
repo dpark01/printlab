@@ -93,7 +93,9 @@ bridge. The bridge rejects FreeCAD mesh/placeholder fallbacks, requires exactly
 one valid closed solid, and compares the canonical OCP tessellation against an
 OpenSCAD reference STL before accepting the build. Actual versions and
 comparison metrics are recorded in `cad_build_report.json`; the native versions
-also participate in build freshness and `run_manifest.json` provenance.
+also participate in build freshness and `run_manifest.json` provenance. See
+[`openscad.md`](openscad.md) for the bridge contract and version-specific
+compatibility handling.
 
 ## What's deliberately out of scope for v0.1
 

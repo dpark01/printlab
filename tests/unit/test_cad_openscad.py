@@ -152,6 +152,33 @@ def test_build_surfaces_freecad_bridge_metadata_on_failure(tmp_path: Path, monke
     assert exc_info.value.code == "freecad_bridge_failed"
 
 
+def test_build_surfaces_structured_freecad_bridge_hint(tmp_path: Path, monkeypatch) -> None:
+    calls = []
+    _patch_success(monkeypatch, calls)
+
+    def failed_bridge(command, *, script_path, cwd, timeout, env):
+        Path(env["PRINTLAB_BRIDGE_METADATA_PATH"]).write_text(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": "expected exactly one solid",
+                    "error_code": "freecad_multiple_solids",
+                    "solid_count": 2,
+                    "hint": "Extrude each 2D piece separately.",
+                }
+            )
+        )
+        return subprocess.CompletedProcess(command, 1, "", "")
+
+    monkeypatch.setattr(openscad_module, "_run_bridge", failed_bridge)
+
+    with pytest.raises(CadBuildError, match="Extrude each 2D piece separately") as exc_info:
+        OpenSCADBackend().build(_request(tmp_path))
+
+    assert exc_info.value.code == "freecad_multiple_solids"
+    assert exc_info.value.context["solid_count"] == 2
+
+
 def test_build_reports_missing_binaries(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(openscad_module, "find_openscad_binary", lambda explicit=None: None)
     monkeypatch.setattr(openscad_module, "find_freecadcmd_binary", lambda explicit=None: None)

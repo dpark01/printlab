@@ -383,9 +383,14 @@ class OpenSCADBackend(CadBackend):
                 )
             bridge_metadata = json.loads(bridge_metadata_path.read_text())
             if bridge_result.returncode != 0 or bridge_metadata.get("status") != "ok":
+                detail = bridge_metadata.get("error", "unknown error")
+                hint = bridge_metadata.get("hint")
+                if hint:
+                    detail = f"{detail}. {hint}"
+                error_code = bridge_metadata.get("error_code")
                 raise CadBuildError(
-                    f"FreeCAD bridge failed: {bridge_metadata.get('error', 'unknown error')}",
-                    code="freecad_bridge_failed",
+                    f"FreeCAD bridge failed: {detail}",
+                    code=error_code if isinstance(error_code, str) else "freecad_bridge_failed",
                     context=bridge_metadata,
                 )
             if bridge_metadata.get("fallback_objects"):
