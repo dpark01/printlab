@@ -1,7 +1,7 @@
 """FastMCP wrapper around printlab_mcp.tools -- the only module importing fastmcp.
 
 Each tool delegates to a plain function in `tools.py` and translates PrintLab's
-own failures (`pipeline.PipelineError`, `printlab.cad.PartBuildError`) into
+own failures (`pipeline.PipelineError`, `printlab.cad.CadBuildError`) into
 `ToolError` so they come back to the client as clean `isError: true` results
 instead of opaque tracebacks.
 """
@@ -18,7 +18,7 @@ from fastmcp.tools.tool import ToolResult
 from fastmcp.utilities.types import Image
 
 from printlab import pipeline
-from printlab.cad import PartBuildError
+from printlab.cad import CadBuildError
 from printlab.schemas import (
     ExportReport,
     FEAMeshPreviewReport,
@@ -52,7 +52,8 @@ mcp = FastMCP(
         "without running the solver, so a bad mesh sizing shows up as a clean error "
         "report rather than the (now-fixed) risk of a crashed run. `function` on "
         "check/all/render/fea/orient/fea_preview/probe overrides printlab.toml's "
-        "[part].function for that one call, without editing the file. Prefer a "
+        "[part].function for that one call, without editing the file (CadQuery "
+        "sources only). Prefer a "
         "bounded iterate-then-recheck loop (edit CAD source -> printlab_check/"
         "printlab_all -> compare -> repeat until no ERROR-level check remains and the "
         "target metric stops improving) over an open-ended edit/rerun cycle."
@@ -64,7 +65,7 @@ mcp = FastMCP(
 def _translate_errors():
     try:
         yield
-    except (pipeline.PipelineError, PartBuildError) as exc:
+    except (pipeline.PipelineError, CadBuildError) as exc:
         raise ToolError(str(exc)) from exc
 
 
@@ -293,7 +294,7 @@ def printlab_diff(report_a: str, report_b: str) -> MetricsDiffReport:
 
 @mcp.tool
 def printlab_doctor() -> dict:
-    """Report installed vs. pinned native slicer versions per backend, plus
+    """Report installed vs. pinned slicer and CAD-tool versions, plus
     the resolved `repo_root` (the server process's working directory at
     launch) that every `example_dir` call's printlab.toml [profiles] paths
     resolve against."""
@@ -301,21 +302,26 @@ def printlab_doctor() -> dict:
 
 
 @mcp.tool
-def printlab_init(example_dir: str, module: str = "part.py") -> str:
-    """Scaffold a printlab.toml in example_dir, pointing at an existing CAD
-    module (default `part.py` -- but any filename works, since `module` is
-    just a relative path) with default printer/material/process profiles.
+def printlab_init(
+    example_dir: str,
+    source: str = "part.py",
+    cad_backend: str = "cadquery",
+    module: str | None = None,
+) -> str:
+    """Scaffold a printlab.toml in example_dir, pointing at existing CAD
+    source (default `part.py`) and selecting `cadquery` or `openscad`.
+    `module` is the legacy alias for `source`.
     Refuses to overwrite an existing printlab.toml, and refuses to scaffold
-    a module that doesn't exist yet -- write the CAD source first. Returns
+    source that doesn't exist yet -- write the CAD source first. Returns
     the written printlab.toml's path."""
     with _translate_errors():
-        return tools.printlab_init(example_dir, module)
+        return tools.printlab_init(example_dir, source, cad_backend, module)
 
 
 @mcp.tool
 def printlab_describe(example_dir: str) -> dict:
     """Resolve example_dir's printlab.toml without building anything: the
-    CAD module/function that will run, the profile paths (and the
+    CAD backend/source/function that will run, the profile paths (and the
     `repo_root` they resolve against), whether an [fea] load case is
     configured, and the output-directory disposability contract. Use this
     to confirm "this builds Canoe.py's build()" without reading the toml by

@@ -9,7 +9,7 @@ mechanics that don't belong there.
 
 ```bash
 uv sync                                    # install/update the environment
-uv run printlab doctor                     # check native slicer versions
+uv run printlab doctor                     # check native slicer/CAD versions
 uv run printlab all examples/bracket --backend prusaslicer
 uv run pytest tests/                       # unit + integration (self-skipping)
 uv run ruff check .                        # lint

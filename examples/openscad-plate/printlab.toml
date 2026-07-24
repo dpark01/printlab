@@ -1,0 +1,12 @@
+# OpenSCAD source is compiled to CSG/reference STL, translated to strict
+# B-rep STEP by FreeCAD, then tessellated canonically by OCP.
+
+[part]
+name = "openscad_plate"
+cad_backend = "openscad"
+source = "part.scad"
+
+[profiles]
+printer = "profiles/printers/bambu_a1.yaml"
+material = "profiles/materials/pla.yaml"
+process = "profiles/processes/draft.yaml"

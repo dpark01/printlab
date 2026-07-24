@@ -26,3 +26,13 @@ role = "Alternative Bambu-compatible backend with a broader vendor profile libra
 version = "2.23"
 homepage = "https://www.calculix.de/"
 role = "FEA solver (ccx) for linear-static deflection/stress analysis (printlab fea)."
+
+[tools.openscad]
+version = "2026.06.12"
+homepage = "https://openscad.org/"
+role = "Parametric CAD compiler for the OpenSCAD source backend (pinned native snapshot)."
+
+[tools.freecad]
+version = "1.1.1"
+homepage = "https://www.freecad.org/"
+role = "Strict OpenSCAD CSG-to-B-rep STEP bridge."

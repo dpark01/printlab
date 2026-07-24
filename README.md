@@ -17,8 +17,9 @@ follows when working in this repo.
 ## Quickstart
 
 ```bash
-uv sync                      # Python deps (CadQuery, trimesh, ...)
-uv run printlab doctor       # check native slicer versions against tools.toml
+scripts/setup-macos.sh        # macOS: complete Python + native stack
+# scripts/setup-linux.sh      # x86_64 apt-based Linux: same stack used by CI
+uv run printlab doctor --strict
 uv run printlab all examples/bracket --backend prusaslicer
 ```
 
@@ -42,16 +43,27 @@ the `fea` extra and CalculiX installed, `uv run printlab fea examples/hook`
 runs a rough linear-static structural estimate (see
 [`docs/fea.md`](docs/fea.md)).
 
-See [`docs/environment.md`](docs/environment.md) for full environment setup
-(macOS/Linux setup scripts, the three-layer reproducibility model).
+The setup scripts are the shared, pinned installation recipe for humans and
+the GitHub Actions heavy job. See [`docs/environment.md`](docs/environment.md)
+for prerequisites, platform support, and the three-layer reproducibility model.
+
+CAD source is selected independently from the slicer backend in
+`printlab.toml`. Existing `part.py` examples default to CadQuery; an OpenSCAD
+part uses `cad_backend = "openscad"` and `source = "part.scad"`. Because
+OpenSCAD cannot export STEP natively, PrintLab compiles CSG plus a reference
+STL, requires FreeCAD to translate the CSG into one valid B-rep solid, and
+rejects mesh fallbacks or geometry that differs from the OpenSCAD reference.
+See `examples/openscad-plate` for a complete configuration and
+[`docs/openscad.md`](docs/openscad.md) for the strict conversion contract,
+compatibility repairs, and actionable failure guidance.
 
 ## Pipeline
 
 ```
-CAD source (part.py)
-    -> build (CadQuery)          -> part.step, part.stl
+CAD source (CadQuery .py | OpenSCAD .scad)
+    -> build (selected CAD backend) -> cad_build_report.json, part.step, part.stl
     -> mesh analysis (trimesh)   -> mesh_report.json
-    -> slice (Bambu | Prusa)     -> slice_result.json, G-code
+    -> slice (Bambu | Orca | Prusa) -> slice_result.json, G-code
     -> gcode analysis (ours)     -> gcode_report.json      <- authoritative metrics
     -> evaluate                  -> printability_report.json
     -> report                    -> report.md, report.html
@@ -65,6 +77,7 @@ provenance record that makes two runs comparable and an agent loop auditable.
 
 | File                        | Produced by            | Notes                                          |
 |------------------------------|-------------------------|-------------------------------------------------|
+| `cad_build_report.json`       | `printlab.cad`          | CAD backend, dependencies, native versions, validation metadata |
 | `part.step` / `part.stl`     | `printlab.cad`          | Pinned tessellation deflection                  |
 | `mesh_report.json`           | `printlab.mesh`         | Geometry only: manifold, bbox, volume, area     |
 | `mesh_repair_report.json`    | `printlab.mesh`         | Explicit-only (`printlab repair`), not in `all` |
@@ -171,10 +184,12 @@ material properties — see [`docs/fea.md`](docs/fea.md) for the engine
 rationale, the load-case format, and why its material constants are exactly
 as uncalibrated as `provisional_score`.
 
-Unit tests need neither a CAD kernel nor a slicer; integration tests are
+Unit tests need neither a native CAD compiler nor a slicer; integration tests are
 capability-gated — most need a real slicer binary and self-skip without one,
 but the `check`/`orient`/optimize-loop tests need only a real CadQuery build
-and always run in the heavy lane, since they exercise no slicer at all.
+and always run in the heavy lane, since they exercise no slicer at all. The
+heavy CI lane installs the pinned OpenSCAD/FreeCAD pair and runs the strict
+bridge against `examples/openscad-plate`.
 
 Partly landed: `printability_report.json` now exposes a `provisional_score`
 (0–100), but it is explicitly UNCALIBRATED — it carries `score_calibrated:

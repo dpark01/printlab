@@ -45,9 +45,10 @@ def _fake_build(calls: list):
         pipeline._write_json_atomic_raw(
             output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"],
             {
+                "cad_backend": config.cad_backend,
                 "cad_source_sha256": f"fake-hash-for-{config.build_function}",
                 "build_function": config.build_function,
-                "part_py": str(config.part_py),
+                "source_path": str(config.source_path),
             },
         )
         return step, stl
@@ -75,17 +76,14 @@ def test_ensure_built_skips_when_fresh(tmp_path, monkeypatch):
     output_dir = tmp_path / "output" / "check"
     output_dir.mkdir(parents=True)
     (output_dir / pipeline.ARTIFACT_FILENAMES["stl"]).write_text("solid x\nendsolid x\n")
+    (output_dir / pipeline.ARTIFACT_FILENAMES["step"]).write_text("ISO-10303-21;\n")
     # build_is_fresh compares against the CAD module's *current* content hash,
     # so the fingerprint has to be computed from a real part.py on disk (not
     # the fake-hash shortcut _write_fresh_fingerprint/_fake_build use).
     config = pipeline.load_part_config(tmp_path)
     (output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"]).write_text(
         json.dumps(
-            {
-                "cad_source_sha256": hash_file(config.part_py),
-                "build_function": config.build_function,
-                "part_py": str(config.part_py),
-            }
+            pipeline._build_fingerprint(config)
         )
     )
 
@@ -107,6 +105,7 @@ def test_ensure_built_rebuilds_stale_build_even_if_stl_present(tmp_path, monkeyp
     output_dir = tmp_path / "output" / "check"
     output_dir.mkdir(parents=True)
     (output_dir / pipeline.ARTIFACT_FILENAMES["stl"]).write_text("solid x\nendsolid x\n")
+    (output_dir / pipeline.ARTIFACT_FILENAMES["step"]).write_text("ISO-10303-21;\n")
     # No build_fingerprint.json written -- simulates a build from before this
     # fix, or a stale/foreign output dir.
 
@@ -129,9 +128,10 @@ def test_ensure_built_rebuilds_when_function_override_differs_from_recorded_buil
     (output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"]).write_text(
         json.dumps(
             {
+                "cad_backend": config.cad_backend,
                 "cad_source_sha256": hash_file(config.part_py),
                 "build_function": "build",
-                "part_py": str(config.part_py),
+                "source_path": str(config.source_path),
             }
         )
     )
@@ -280,14 +280,11 @@ def test_printlab_render_reports_rebuilt_false_when_build_is_fresh(tmp_path, mon
     output_dir = tmp_path / "output" / "check"
     output_dir.mkdir(parents=True)
     (output_dir / pipeline.ARTIFACT_FILENAMES["stl"]).write_text("solid x\nendsolid x\n")
+    (output_dir / pipeline.ARTIFACT_FILENAMES["step"]).write_text("ISO-10303-21;\n")
     config = pipeline.load_part_config(tmp_path)
     (output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"]).write_text(
         json.dumps(
-            {
-                "cad_source_sha256": hash_file(config.part_py),
-                "build_function": config.build_function,
-                "part_py": str(config.part_py),
-            }
+            pipeline._build_fingerprint(config)
         )
     )
     calls: list = []
@@ -353,6 +350,18 @@ def test_printlab_init_scaffolds_toml_pointing_at_existing_module(tmp_path):
     assert config.fea_load_case is None
 
 
+def test_printlab_init_scaffolds_openscad_source(tmp_path):
+    (tmp_path / "part.scad").write_text("cube([1, 1, 1]);\n")
+
+    written = tools.printlab_init(str(tmp_path), source="part.scad", cad_backend="openscad")
+
+    assert Path(written) == tmp_path / "printlab.toml"
+    config = pipeline.load_part_config(tmp_path, repo_root=tmp_path)
+    assert config.cad_backend == "openscad"
+    assert config.source_path == tmp_path / "part.scad"
+    assert config.build_function is None
+
+
 def test_printlab_init_refuses_to_overwrite_existing_toml(tmp_path):
     (tmp_path / "part.py").write_text("def build():\n    ...\n")
     tools.printlab_init(str(tmp_path))
@@ -372,6 +381,8 @@ def test_printlab_describe_reports_resolved_config(tmp_path):
     described = tools.printlab_describe(str(tmp_path))
 
     assert described["name"] == "widget"
+    assert described["cad_backend"] == "cadquery"
+    assert described["source_path"] == str(tmp_path / "part.py")
     assert described["part_py"] == str(tmp_path / "part.py")
     assert described["build_function"] == "build"
     assert described["fea_configured"] is False
@@ -539,3 +550,4 @@ def test_printlab_doctor_reports_repo_root():
     result = tools.printlab_doctor()
     assert "repo_root" in result
     assert Path(result["repo_root"]).is_absolute()
+    assert {tool["tool"] for tool in result["cad_tools"]} == {"openscad", "freecad"}

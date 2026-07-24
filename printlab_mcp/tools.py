@@ -2,18 +2,19 @@
 
 Kept free of any `fastmcp` import so it is unit-testable without the optional
 MCP dependency installed; `server.py` wraps these and owns the MCP-specific
-error translation. Failures propagate as `pipeline.PipelineError` (or
-`printlab.cad.PartBuildError`) rather than being swallowed here.
+error translation. Failures propagate as `pipeline.PipelineError` or
+`printlab.cad.CadBuildError` rather than being swallowed here.
 """
 
 from __future__ import annotations
 
 import shutil
-from dataclasses import replace
 from pathlib import Path
 from typing import Literal
 
 from printlab import pipeline
+from printlab.cad import CadBuildError, get_cad_backend
+from printlab.cad.openscad import detect_openscad_toolchain
 from printlab.rendering import DEFAULT_VIEWS, CameraView
 from printlab.schemas import (
     ExportedFile,
@@ -62,9 +63,7 @@ def ensure_built(
     above: requesting a different function makes the existing build stale, so
     it rebuilds automatically instead of silently reusing the wrong target.
     """
-    config = pipeline.load_part_config(Path(example_dir))
-    if function is not None:
-        config = replace(config, build_function=function)
+    config = pipeline.override_build_function(pipeline.load_part_config(Path(example_dir)), function)
     resolved_output_dir = Path(output_dir) if output_dir else pipeline.default_output_dir(config, backend)
     stl_path = resolved_output_dir / pipeline.ARTIFACT_FILENAMES["stl"]
     rebuilt = not stl_path.is_file() or not pipeline.build_is_fresh(config, resolved_output_dir)
@@ -430,8 +429,29 @@ def printlab_doctor() -> dict:
                 "notes": cap.notes,
             }
         )
+    cad_tools = []
+    for name, cap in detect_openscad_toolchain().items():
+        pinned_version = pinned.get(name, {}).get("version")
+        if not cap["available"]:
+            status = "missing"
+        elif cap["version"] is None or (pinned_version and cap["version"] != pinned_version):
+            status = "warn"
+        else:
+            status = "ok"
+        cad_tools.append(
+            {
+                "tool": name,
+                "status": status,
+                "available": cap["available"],
+                "installed_version": cap["version"],
+                "pinned_version": pinned_version,
+                "binary": cap["binary"],
+                "notes": cap["notes"],
+            }
+        )
     return {
         "backends": backends,
+        "cad_tools": cad_tools,
         # The one piece of "hidden" global state every example_dir call
         # depends on: printlab.toml [profiles] paths resolve relative to
         # this, the server process's cwd at launch -- not example_dir's
@@ -461,16 +481,29 @@ _PROFILE_PATH_COMMENT = (
     "# Paths are resolved relative to the printlab MCP server's working\n"
     "# directory at launch -- typically wherever printlab was installed via\n"
     "# `uv --directory <path>`, not this file's location. Run printlab_doctor\n"
-    "# to confirm which backends that installation can see."
+    "# to confirm which slicers and CAD tools that installation can see."
 )
 
 
-def printlab_init(example_dir: str, module: str = "part.py") -> str:
-    """Scaffold a printlab.toml in example_dir, pointing at an existing CAD
-    module (default part.py, but any filename works -- see printlab.toml's
-    [part].module) with the default printer/material/process profiles.
+def printlab_init(
+    example_dir: str,
+    source: str = "part.py",
+    cad_backend: str = "cadquery",
+    module: str | None = None,
+) -> str:
+    """Scaffold a printlab.toml in example_dir, pointing at existing CAD
+    source and selecting its CAD backend. `module` preserves the former named
+    argument as an alias for `source`.
     Refuses to overwrite an existing printlab.toml; use printlab_describe to
     inspect one first."""
+    if module is not None:
+        if source != "part.py":
+            raise pipeline.PipelineError("printlab_init accepts either `source` or legacy `module`, not both")
+        source = module
+    try:
+        get_cad_backend(cad_backend)
+    except CadBuildError as exc:
+        raise pipeline.PipelineError(str(exc)) from exc
     example_path = Path(example_dir)
     if not example_path.is_dir():
         raise pipeline.PipelineError(f"{example_path} is not a directory")
@@ -480,21 +513,23 @@ def printlab_init(example_dir: str, module: str = "part.py") -> str:
             f"{config_path} already exists; printlab_init refuses to overwrite it "
             "(use printlab_describe to inspect it instead)"
         )
-    part_module_path = example_path / module
-    if not part_module_path.is_file():
+    source_path = example_path / source
+    if not source_path.is_file():
         raise pipeline.PipelineError(
-            f"{part_module_path} does not exist -- printlab_init scaffolds a printlab.toml "
-            "pointing at an existing CAD module, it does not create one"
+            f"{source_path} does not exist -- printlab_init scaffolds a printlab.toml "
+            "pointing at existing CAD source, it does not create one"
         )
 
+    function_line = 'function = "build"\n' if cad_backend == "cadquery" else ""
     contents = (
         f"# Example part configuration for `printlab build|mesh|slice|... {example_path}`.\n"
         f"{_PROFILE_PATH_COMMENT}\n"
         "\n"
         "[part]\n"
         f'name = "{example_path.name}"\n'
-        f'module = "{module}"\n'
-        'function = "build"\n'
+        f'cad_backend = "{cad_backend}"\n'
+        f'source = "{source}"\n'
+        f"{function_line}"
         "\n"
         "[profiles]\n"
         f'printer = "{_DEFAULT_PROFILE_PATHS["printer"]}"\n'
@@ -507,14 +542,17 @@ def printlab_init(example_dir: str, module: str = "part.py") -> str:
 
 def printlab_describe(example_dir: str) -> dict:
     """Resolve example_dir's printlab.toml without building anything: which
-    CAD module/function will run, the profile paths (and the repo_root
+    CAD backend/source/function will run, the profile paths (and the repo_root
     they're resolved against), whether an [fea] load case is configured, and
     the output-directory layout/disposability contract."""
     config = pipeline.load_part_config(Path(example_dir))
     return {
         "name": config.name,
+        "cad_backend": config.cad_backend,
+        "source_path": str(config.source_path),
         "part_py": str(config.part_py),
         "build_function": config.build_function,
+        "cad_options": config.cad_options,
         "printer_profile_path": str(config.printer_profile_path),
         "material_profile_path": str(config.material_profile_path),
         "process_profile_path": str(config.process_profile_path),
@@ -524,6 +562,6 @@ def printlab_describe(example_dir: str) -> dict:
         "output_dir_note": (
             "output/<backend>/ is fully disposable: printlab_check/printlab_all wipe and "
             "regenerate it (clean=True) on every run against that backend. Never hand-edit "
-            "anything under it -- only example_dir's CAD source (part_py above) is durable."
+            "anything under it -- only example_dir's CAD source (source_path above) is durable."
         ),
     }

@@ -46,7 +46,10 @@ _BRIM_WIDTH_MM = "5"
 class BambuStudioBackend(PrusaLikeBackend):
     name = "bambu"
     binary_name = "BambuStudio"
-    candidate_paths = (Path("/Applications/BambuStudio.app/Contents/MacOS/BambuStudio"),)
+    candidate_paths = (
+        Path.home() / "Applications" / "BambuStudio.app" / "Contents" / "MacOS" / "BambuStudio",
+        Path("/Applications/BambuStudio.app/Contents/MacOS/BambuStudio"),
+    )
 
     def _version(self, binary: Path) -> str | None:
         result = self.run_cli(binary, ["--help"], timeout=30)

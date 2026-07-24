@@ -14,8 +14,9 @@ import cadquery as cq
 import pytest
 
 from printlab import pipeline
-from printlab.cad import export_step
+from printlab.cad import CadBuildError, CadBuildResult, export_step, export_stl
 from printlab.determinism import hash_file
+from printlab.schemas import CadBuildReport
 
 
 def _make_config(tmp_path: Path, *, build_function: str = "build") -> pipeline.PartConfig:
@@ -24,12 +25,30 @@ def _make_config(tmp_path: Path, *, build_function: str = "build") -> pipeline.P
     return pipeline.PartConfig(
         name="widget",
         example_dir=tmp_path,
-        part_py=part_py,
-        build_function=build_function,
+        source_path=part_py,
         printer_profile_path=tmp_path / "printer.yaml",
         material_profile_path=tmp_path / "material.yaml",
         process_profile_path=tmp_path / "process.yaml",
+        build_function=build_function,
     )
+
+
+def _fake_backend(*, dependencies=(), tool_versions=None):
+    class FakeBackend:
+        def tool_versions(self, request):
+            return tool_versions or {}
+
+        def build(self, request):
+            shape = cq.Workplane("XY").box(1, 1, 1)
+            return CadBuildResult(
+                backend_name="cadquery",
+                step_path=export_step(shape, request.output_dir / "part.step"),
+                stl_path=export_stl(shape, request.output_dir / "part.stl"),
+                dependencies=dependencies,
+                tool_versions=tool_versions or {},
+            )
+
+    return FakeBackend()
 
 
 class TestBuildIsFresh:
@@ -45,10 +64,7 @@ class TestBuildIsFresh:
         output_dir = tmp_path / "output"
         output_dir.mkdir()
 
-        def fake_build_part(part_py, function_name):
-            return cq.Workplane("XY").box(1, 1, 1)
-
-        monkeypatch.setattr(pipeline, "build_part", fake_build_part)
+        monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: _fake_backend())
         pipeline.stage_build(config, output_dir)
 
         assert pipeline.build_is_fresh(config, output_dir) is True
@@ -57,9 +73,7 @@ class TestBuildIsFresh:
         config = _make_config(tmp_path)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        monkeypatch.setattr(
-            pipeline, "build_part", lambda part_py, function_name: cq.Workplane("XY").box(1, 1, 1)
-        )
+        monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: _fake_backend())
         pipeline.stage_build(config, output_dir)
 
         config.part_py.write_text("def build():\n    pass  # edited\n")
@@ -70,9 +84,7 @@ class TestBuildIsFresh:
         config = _make_config(tmp_path)
         output_dir = tmp_path / "output"
         output_dir.mkdir()
-        monkeypatch.setattr(
-            pipeline, "build_part", lambda part_py, function_name: cq.Workplane("XY").box(1, 1, 1)
-        )
+        monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: _fake_backend())
         pipeline.stage_build(config, output_dir)
 
         other_config = replace(config, build_function="build_closed")
@@ -89,6 +101,79 @@ class TestBuildIsFresh:
         config.part_py.unlink()
 
         assert pipeline.build_is_fresh(config, output_dir) is False
+
+    @pytest.mark.parametrize("malformed", ["[]", "null", '"value"'])
+    def test_false_for_non_object_fingerprint(self, tmp_path, malformed):
+        config = _make_config(tmp_path)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        (output_dir / pipeline.ARTIFACT_FILENAMES["step"]).write_text("STEP")
+        (output_dir / pipeline.ARTIFACT_FILENAMES["stl"]).write_text("STL")
+        (output_dir / pipeline.ARTIFACT_FILENAMES["build_fingerprint"]).write_text(malformed)
+
+        assert pipeline.build_is_fresh(config, output_dir) is False
+
+    def test_false_when_step_is_missing(self, tmp_path, monkeypatch):
+        config = _make_config(tmp_path)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: _fake_backend())
+        pipeline.stage_build(config, output_dir)
+        (output_dir / pipeline.ARTIFACT_FILENAMES["step"]).unlink()
+
+        assert pipeline.build_is_fresh(config, output_dir) is False
+
+    def test_false_after_dependency_is_edited(self, tmp_path, monkeypatch):
+        config = _make_config(tmp_path)
+        dependency = tmp_path / "included.scad"
+        dependency.write_text("width = 10;\n")
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        backend = _fake_backend(dependencies=(config.source_path, dependency), tool_versions={"cad": "1"})
+        monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: backend)
+        pipeline.stage_build(config, output_dir)
+        dependency.write_text("width = 11;\n")
+
+        assert pipeline.build_is_fresh(config, output_dir) is False
+
+    def test_false_after_backend_version_changes(self, tmp_path, monkeypatch):
+        config = _make_config(tmp_path)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        monkeypatch.setattr(
+            pipeline,
+            "get_cad_backend",
+            lambda name: _fake_backend(dependencies=(config.source_path,), tool_versions={"cad": "1"}),
+        )
+        pipeline.stage_build(config, output_dir)
+        monkeypatch.setattr(
+            pipeline,
+            "get_cad_backend",
+            lambda name: _fake_backend(dependencies=(config.source_path,), tool_versions={"cad": "2"}),
+        )
+
+        assert pipeline.build_is_fresh(config, output_dir) is False
+
+
+def test_stage_build_writes_structured_error_report(tmp_path, monkeypatch):
+    config = _make_config(tmp_path)
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    class FailingBackend:
+        def build(self, request):
+            raise CadBuildError("translator failed", code="translation_failed", context={"exit": 2})
+
+    monkeypatch.setattr(pipeline, "get_cad_backend", lambda name: FailingBackend())
+
+    with pytest.raises(CadBuildError, match="translator failed"):
+        pipeline.stage_build(config, output_dir)
+
+    report = CadBuildReport.model_validate_json(
+        (output_dir / pipeline.ARTIFACT_FILENAMES["cad_build_report"]).read_text()
+    )
+    assert report.status.value == "error"
+    assert report.errors[0].code == "translation_failed"
 
 
 class TestStageFeaPreview:

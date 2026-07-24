@@ -49,6 +49,10 @@ VOLATILE_KEYS: frozenset[str] = frozenset(
         "gcode_path",
         "project_path",
         "output_path",
+        "source_path",
+        "step_path",
+        "stl_path",
+        "dependencies",
     }
 )
 

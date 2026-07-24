@@ -77,7 +77,7 @@ artifact as structured content. `printlab_check`, `printlab_orient`, and
 `printlab_render` need no slicer; `printlab_all` does (query `printlab_doctor`
 first). `backend` defaults to `"check"` almost everywhere -- a no-slicer
 *sentinel* (skip slicing entirely), not a real backend name; the real
-choices are `"prusaslicer"`/`"bambu"`. Every `example_dir` tool also accepts
+choices are `"prusaslicer"`/`"bambu"`/`"orcaslicer"`. Every `example_dir` tool also accepts
 an optional `output_dir` to redirect artifacts away from the default
 `<example_dir>/output/<backend>/` (itself fully disposable -- wiped and
 regenerated on every run against that backend).
@@ -86,7 +86,8 @@ regenerated on every run against that backend).
 optional `function`, overriding `printlab.toml`'s `[part].function` for that
 one call without editing the file -- useful when a CAD module defines more
 than one builder (e.g. a flat `build()` vs. an assembled `build_closed()`
-verification variant).
+verification variant). Function overrides apply only to the CadQuery backend;
+OpenSCAD source has no Python build function.
 
 | Tool                   | Signature                                                                                                                                                                                                                     | Returns                                | Slicer? |
 |------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------|---------|
@@ -99,8 +100,8 @@ verification variant).
 | `printlab_probe`       | `printlab_probe(example_dir: str, points: list[tuple[float,float,float]], backend: str = "check", tolerance_mm: float = 1e-6, output_dir: str \| None = None, function: str \| None = None)`                                  | `ProbeReport`                           | no      |
 | `printlab_export`      | `printlab_export(example_dir: str, backend: str, dest_dir: str, formats: list[str] \| None = None, name_prefix: str \| None = None)`                                                                                           | `ExportReport`                          | no      |
 | `printlab_diff`        | `printlab_diff(report_a: str, report_b: str)`                                                                                                                                                                                  | `MetricsDiffReport`                    | no      |
-| `printlab_doctor`      | `printlab_doctor()`                                                                                                                                                                                                             | per-backend version dict + `repo_root`  | no      |
-| `printlab_init`        | `printlab_init(example_dir: str, module: str = "part.py")`                                                                                                                                                                     | path to scaffolded toml (`str`)         | no      |
+| `printlab_doctor`      | `printlab_doctor()`                                                                                                                                                                                                             | slicer/CAD-tool versions + `repo_root`  | no      |
+| `printlab_init`        | `printlab_init(example_dir: str, source: str = "part.py", cad_backend: str = "cadquery", module: str \| None = None)`                                                                                                      | path to scaffolded toml (`str`)         | no      |
 | `printlab_describe`    | `printlab_describe(example_dir: str)`                                                                                                                                                                                          | resolved-config dict                    | no      |
 
 `printlab_render`'s `views` presets: `iso` (3/4 angled), `front`/`back` (look
@@ -178,11 +179,13 @@ and which `checks[]` entries changed status -- making AGENTS.md's "compare
 metrics numerically across runs, not visually" guidance mechanical instead of
 an eyeballed JSON diff.
 
-`printlab_init` scaffolds a `printlab.toml` for an existing CAD module
-(default `part.py`) with default printer/material/process profiles; it
-refuses to overwrite an existing toml or to scaffold one pointing at a module
-that doesn't exist yet. `printlab_describe` resolves a `printlab.toml`
-without building anything -- the CAD module/function, profile paths, the
+`printlab_init` scaffolds a `printlab.toml` for existing CAD source (default
+CadQuery `part.py`; pass `source="part.scad", cad_backend="openscad"` for
+OpenSCAD) with default printer/material/process profiles. The legacy `module`
+argument remains an alias for `source`. It refuses to overwrite an existing
+toml or to scaffold one pointing at source that doesn't exist yet.
+`printlab_describe` resolves a `printlab.toml` without building anything --
+the CAD backend/source/function/options, profile paths, the
 `repo_root` they resolve against, and whether `[fea]` is configured -- useful
 for confirming what a target directory will build, or before hand-writing a
 toml at all (missing-toml errors from every other tool also now include a
@@ -204,7 +207,7 @@ the deterministic-pipeline discipline from `AGENTS.md`:
 
 - **`printlab-iterate`** — evaluate and iteratively improve a part: run the
   pipeline, read the JSON artifacts (not the Markdown), propose CAD-source
-  edits to `part.py` only, rerun, and compare metrics numerically. Never
+  edits to the configured `[part].source` only, rerun, and compare metrics numerically. Never
   bypasses a FAIL by loosening thresholds; never optimizes the uncalibrated
   `provisional_score`.
 - **`printlab-render`** — render a part to PNGs from standard or custom camera

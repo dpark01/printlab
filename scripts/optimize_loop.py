@@ -93,14 +93,16 @@ def optimize(
     (b) `propose_edit` returns `None` (no further edit to try), or
     (c) `max_iters` is reached.
 
-    `runner` receives only `example_dir`; bind a specific output directory
-    or slicer backend with `functools.partial`/a lambda if needed. The
+    `propose_edit` receives the text of `[part].source`, whether that is a
+    CadQuery `.py` file or an OpenSCAD `.scad` file. `runner` receives only
+    `example_dir`; bind a specific output directory or slicer backend with
+    `functools.partial`/a lambda if needed. The
     example's CAD source is restored to its original content before
     returning, regardless of outcome -- a run never leaves the repo dirty.
     """
     example_dir = Path(example_dir)
     config = pipeline.load_part_config(example_dir)
-    original_source = config.part_py.read_text()
+    original_source = config.source_path.read_text()
     current_source = original_source
 
     history: list[IterationRecord] = []
@@ -147,10 +149,10 @@ def optimize(
                 stop_reason = "propose_edit returned None (no further edit proposed)"
                 break
 
-            config.part_py.write_text(new_source)
+            config.source_path.write_text(new_source)
             current_source = new_source
     finally:
-        config.part_py.write_text(original_source)
+        config.source_path.write_text(original_source)
 
     return OptimizeResult(
         example_dir=example_dir,
@@ -170,7 +172,8 @@ def make_constant_nudge_proposer(
     maximum: float | None = None,
 ) -> Callable[[str, dict], str | None]:
     """A deterministic demo proposer: increments `constant_name`'s numeric
-    value in CAD source by `step` each call, clamped to [minimum, maximum]
+    value in CAD source by `step` each call, clamped to [minimum, maximum].
+    The assignment syntax is valid for both Python and OpenSCAD constants
     (returning `None` -- "no further edit" -- once a step would cross a
     bound). Not a real design-search strategy; a real agent supplies its own
     `propose_edit` callback instead (see module docstring).
